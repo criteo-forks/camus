@@ -251,7 +251,7 @@
 	<distributionManagement>
 		<repository>
 			<!-- identifies credentials id. Will be renamed to criteo later on -->
-			<id>criteo.release</id>
+			<id>criteo.releases</id>
 			<name>Criteo Thirdparty</name>
 			<url>http://nexus.central.criteo.prod/content/repositories/criteo.thirdparty</url>
 		</repository>
