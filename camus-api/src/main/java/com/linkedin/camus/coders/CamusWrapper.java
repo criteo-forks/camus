@@ -71,4 +71,10 @@ public class CamusWrapper<R> {
         return partitionMap;
     }
 
+    /**
+     * Set timestamp
+     */
+    public void setTimestamp(long timestamp){
+        this.timestamp = timestamp;
+    }
 }
