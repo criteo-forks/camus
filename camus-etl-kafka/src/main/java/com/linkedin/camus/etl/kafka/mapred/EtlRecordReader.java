@@ -119,7 +119,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
     }
   }
 
-  private CamusWrapper getWrappedRecord(String topicName, byte[] payload) throws IOException {
+  protected CamusWrapper getWrappedRecord(String topicName, byte[] payload) throws IOException {
     CamusWrapper r = null;
     try {
       r = decoder.decode(payload);
