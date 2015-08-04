@@ -150,6 +150,26 @@ public class CamusJobTest {
   }
 
   @Test
+  public void runJobWithGoToLastOffset() throws Exception {
+    props.setProperty(EtlInputFormat.KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN, "true");
+    job = new CamusJob(props);
+    job.run();
+
+    assertThat(readMessages(TOPIC_1).isEmpty(), is(true));
+    assertThat(readMessages(TOPIC_2).isEmpty(), is(true));
+    assertThat(readMessages(TOPIC_3).isEmpty(), is(true));
+
+    props.setProperty(EtlInputFormat.KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN, "false");
+    job.run();
+    //Since we're already at the end of the job, nothing should be read either
+
+    assertThat(readMessages(TOPIC_1).isEmpty(), is(true));
+    assertThat(readMessages(TOPIC_2).isEmpty(), is(true));
+    assertThat(readMessages(TOPIC_3).isEmpty(), is(true));
+
+  }
+
+  @Test
   public void runJobWithoutErrorsAndFailOnErrors() throws Exception {
     props.setProperty(CamusJob.ETL_FAIL_ON_ERRORS, Boolean.TRUE.toString());
     job = new CamusJob(props);

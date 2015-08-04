@@ -64,6 +64,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
   public static final String KAFKA_MOVE_TO_LAST_OFFSET_LIST = "kafka.move.to.last.offset.list";
   public static final String KAFKA_MOVE_TO_EARLIEST_OFFSET = "kafka.move.to.earliest.offset";
 
+  public static final String KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN = "kafka.move.to.last.offset.on.first.run";
+
   public static final String KAFKA_CLIENT_BUFFER_SIZE = "kafka.client.buffer.size";
   public static final String KAFKA_CLIENT_SO_TIMEOUT = "kafka.client.so.timeout";
 
@@ -309,9 +311,14 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     log.info("The requests from kafka metadata are: \n" + finalRequests);
     writeRequests(finalRequests, context);
     Map<CamusRequest, EtlKey> offsetKeys = getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
+    HashSet<String> alreadySeen = getAlreadySeenTopics(offsetKeys);
+
     Set<String> moveLatest = getMoveToLatestTopicsSet(context);
+    boolean shouldMoveLatestIfNew = getKafkaMoveToLatestOffsetOnFirstRun(context);
     for (CamusRequest request : finalRequests) {
-      if (moveLatest.contains(request.getTopic()) || moveLatest.contains("all")) {
+      String topic = request.getTopic();
+      if (moveLatest.contains(topic) || moveLatest.contains("all")
+              || ( shouldMoveLatestIfNew && ! alreadySeen.contains(topic))) {
         log.info("Moving to latest for topic: " + request.getTopic());
         //TODO: factor out kafka specific request functionality 
         EtlKey oldKey = offsetKeys.get(request);
@@ -376,19 +383,29 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     return allocator.allocateWork(finalRequests, context);
   }
 
-  private Set<String> getMoveToLatestTopicsSet(JobContext context) {
-    Set<String> topics = new HashSet<String>();
 
-    String[] arr = getMoveToLatestTopics(context);
 
-    if (arr != null) {
-      for (String topic : arr) {
-        topics.add(topic);
-      }
+  private HashSet<String> getAlreadySeenTopics(Map<CamusRequest, EtlKey> offsetKeys) {
+    HashSet<String> topics = new HashSet<String>();
+    for(EtlKey key:offsetKeys.values()){
+      topics.add(key.getTopic());
     }
-
     return topics;
   }
+
+  private Set<String> stringsToSet(String[] items){
+    Set<String> result = new HashSet<String>();
+    if (items == null)
+      return result;
+    for (String item:items)
+      result.add(item);
+    return result;
+  }
+
+  private Set<String> getMoveToLatestTopicsSet(JobContext context) {
+     return stringsToSet(getMoveToLatestTopics(context));
+  }
+
 
   private boolean createMessageDecoder(JobContext context, String topic) {
     try {
@@ -529,6 +546,14 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
   public static void setKafkaBlacklistTopic(JobContext job, String val) {
     job.getConfiguration().set(KAFKA_BLACKLIST_TOPIC, val);
+  }
+
+  public static boolean getKafkaMoveToLatestOffsetOnFirstRun(JobContext job){
+    return job.getConfiguration().getBoolean(KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN, false);
+  }
+
+  public static void  setKafkaMoveToLatestOffsetOnFirstRun(JobContext job, boolean val){
+    job.getConfiguration().setBoolean(KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN, val);
   }
 
   public static String[] getKafkaBlacklistTopic(JobContext job) {
