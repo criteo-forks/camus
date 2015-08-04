@@ -8,7 +8,7 @@
 
 	<groupId>com.linkedin.camus</groupId>
 	<artifactId>camus-parent</artifactId>
-	<version>1.0-criteo2</version>
+	<version>1.1-criteo2</version>
 	<packaging>pom</packaging>
 	<name>Camus Parent</name>
 	<description>
