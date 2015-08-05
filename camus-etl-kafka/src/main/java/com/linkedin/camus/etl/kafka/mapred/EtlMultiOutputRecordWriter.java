@@ -6,6 +6,8 @@ import java.util.HashMap;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.SequenceFile.Writer;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -37,11 +39,12 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     this.context = context;
     this.committer = committer;
     errorWriter =
-        SequenceFile.createWriter(
-            FileSystem.get(context.getConfiguration()),
-            context.getConfiguration(),
-            new Path(committer.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
-                EtlMultiOutputFormat.ERRORS_PREFIX, "")), EtlKey.class, ExceptionWritable.class);
+        SequenceFile.createWriter(context.getConfiguration(),
+            SequenceFile.Writer.file(new Path(committer.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
+                EtlMultiOutputFormat.ERRORS_PREFIX, ""))),
+            SequenceFile.Writer.keyClass(EtlKey.class),
+            SequenceFile.Writer.valueClass(ExceptionWritable.class),
+            EtlConfigurationUtils.smallBlockSizeOption(context.getConfiguration()));
 
     if (EtlInputFormat.getKafkaMaxHistoricalDays(context) != -1) {
       int maxDays = EtlInputFormat.getKafkaMaxHistoricalDays(context);

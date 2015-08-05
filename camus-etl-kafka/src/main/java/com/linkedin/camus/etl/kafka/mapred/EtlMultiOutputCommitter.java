@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -136,11 +137,12 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
     }
 
     SequenceFile.Writer offsetWriter =
-        SequenceFile.createWriter(
-            fs,
-            context.getConfiguration(),
-            new Path(super.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
-                EtlMultiOutputFormat.OFFSET_PREFIX, "")), EtlKey.class, NullWritable.class);
+        SequenceFile.createWriter(context.getConfiguration(),
+            SequenceFile.Writer.file(new Path(super.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
+                EtlMultiOutputFormat.OFFSET_PREFIX, ""))),
+            SequenceFile.Writer.keyClass(EtlKey.class),
+            SequenceFile.Writer.valueClass(NullWritable.class),
+            EtlConfigurationUtils.smallBlockSizeOption(context.getConfiguration()));
     for (String s : offsets.keySet()) {
       offsetWriter.append(offsets.get(s), NullWritable.get());
     }

@@ -11,10 +11,12 @@ import com.linkedin.camus.etl.kafka.common.LeaderInfo;
 import com.linkedin.camus.workallocater.CamusRequest;
 import com.linkedin.camus.workallocater.WorkAllocator;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapreduce.InputFormat;
@@ -99,7 +101,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
   /**
    * Gets the metadata from Kafka
-   * 
+   *
    * @param context
    * @return
    */
@@ -153,10 +155,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
             CamusJob.getKafkaClientName(context));
     return consumer;
   }
-  
+
   /**
    * Gets the latest offsets and create the requests as needed
-   * 
+   *
    * @param context
    * @param offsetRequestInfo
    * @return
@@ -194,7 +196,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
         long earliestOffset =
             earliestOffsetResponse.offsets(topicAndPartition.topic(), topicAndPartition.partition())[0];
 
-        //TODO: factor out kafka specific request functionality 
+        //TODO: factor out kafka specific request functionality
         CamusRequest etlRequest =
             new EtlRequest(context, topicAndPartition.topic(), Integer.toString(leader.getLeaderId()),
                 topicAndPartition.partition(), leader.getUri());
@@ -320,7 +322,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
       if (moveLatest.contains(topic) || moveLatest.contains("all")
               || ( shouldMoveLatestIfNew && ! alreadySeen.contains(topic))) {
         log.info("Moving to latest for topic: " + request.getTopic());
-        //TODO: factor out kafka specific request functionality 
+        //TODO: factor out kafka specific request functionality
         EtlKey oldKey = offsetKeys.get(request);
         EtlKey newKey =
             new EtlKey(request.getTopic(), ((EtlRequest) request).getLeaderId(), request.getPartition(), 0,
@@ -345,7 +347,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
         } else {
           log.error("The current offset was found to be more than the latest offset: " + request);
         }
-        
+
         boolean move_to_earliest_offset = context.getConfiguration().getBoolean(KAFKA_MOVE_TO_EARLIEST_OFFSET, false);
         boolean offsetUnset = request.getOffset() == EtlRequest.DEFAULT_OFFSET;
         log.info("move_to_earliest: " + move_to_earliest_offset + " offset_unset: " + offsetUnset);
@@ -355,7 +357,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
           request.setOffset(request.getEarliestOffset());
           offsetKeys.put(
               request,
-              //TODO: factor out kafka specific request functionality 
+              //TODO: factor out kafka specific request functionality
               new EtlKey(request.getTopic(), ((EtlRequest) request).getLeaderId(), request.getPartition(), 0, request
                   .getOffset()));
         } else {
@@ -427,7 +429,11 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     output = new Path(output, EtlMultiOutputFormat.OFFSET_PREFIX + "-previous");
     SequenceFile.Writer writer =
-        SequenceFile.createWriter(fs, context.getConfiguration(), output, EtlKey.class, NullWritable.class);
+        SequenceFile.createWriter(context.getConfiguration(),
+            SequenceFile.Writer.file(output),
+            SequenceFile.Writer.keyClass(EtlKey.class),
+            SequenceFile.Writer.valueClass(NullWritable.class),
+            EtlConfigurationUtils.smallBlockSizeOption(context.getConfiguration()));
 
     for (EtlKey key : missedKeys) {
       writer.append(key, NullWritable.get());
@@ -446,10 +452,14 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     output = new Path(output, EtlMultiOutputFormat.REQUESTS_FILE);
     SequenceFile.Writer writer =
-        SequenceFile.createWriter(fs, context.getConfiguration(), output, EtlRequest.class, NullWritable.class);
+        SequenceFile.createWriter(context.getConfiguration(),
+            SequenceFile.Writer.file(output),
+            SequenceFile.Writer.keyClass(EtlRequest.class),
+            SequenceFile.Writer.valueClass(NullWritable.class),
+            EtlConfigurationUtils.smallBlockSizeOption(context.getConfiguration()));
 
     for (CamusRequest r : requests) {
-      //TODO: factor out kafka specific request functionality 
+      //TODO: factor out kafka specific request functionality
       writer.append((EtlRequest) r, NullWritable.get());
     }
     writer.close();
@@ -464,7 +474,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
         SequenceFile.Reader reader = new SequenceFile.Reader(fs, f.getPath(), context.getConfiguration());
         EtlKey key = new EtlKey();
         while (reader.next(key, NullWritable.get())) {
-          //TODO: factor out kafka specific request functionality 
+          //TODO: factor out kafka specific request functionality
           CamusRequest request = new EtlRequest(context, key.getTopic(), key.getLeaderId(), key.getPartition());
           if (offsetKeysMap.containsKey(request)) {
 
