@@ -19,6 +19,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
+import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -309,6 +310,11 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
         return r1.getTopic().compareTo(r2.getTopic());
       }
     });
+
+    final Configuration conf = context.getConfiguration();
+    if(conf.getBoolean("mapred.map.tasks.dynamic", true)) {
+      conf.set("mapred.map.tasks", Integer.toString(finalRequests.size() / 2));
+    }
 
     log.info("The requests from kafka metadata are: \n" + finalRequests);
     writeRequests(finalRequests, context);
