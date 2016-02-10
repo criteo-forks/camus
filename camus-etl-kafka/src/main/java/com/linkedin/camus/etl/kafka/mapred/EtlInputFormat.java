@@ -313,8 +313,8 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     final Configuration conf = context.getConfiguration();
     if(conf.getBoolean("mapred.map.tasks.dynamic", true)) {
-      final int numMapFit = Math.max(1, finalRequests.size() / 2);
-      final int numMapMax = conf.getInt("mapred.map.tasks,max", 1000);
+      final int numMapFit = Math.max(1, finalRequests.size() / conf.getInt("camus.map.tasks.topic",2));
+      final int numMapMax = conf.getInt("mapred.map.tasks.max", 1000);
       conf.set("mapred.map.tasks",
               Integer.toString(Math.min(numMapFit, numMapMax)));
     }
