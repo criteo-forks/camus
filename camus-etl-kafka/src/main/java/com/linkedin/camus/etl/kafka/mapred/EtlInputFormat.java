@@ -192,18 +192,32 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
           consumer.getOffsetsBefore(new OffsetRequest(earliestOffsetInfo, kafka.api.OffsetRequest.CurrentVersion(),
               CamusJob.getKafkaClientName(context)));
       consumer.close();
-      for (TopicAndPartition topicAndPartition : topicAndPartitions) {
-        long latestOffset = latestOffsetResponse.offsets(topicAndPartition.topic(), topicAndPartition.partition())[0];
-        long earliestOffset =
-            earliestOffsetResponse.offsets(topicAndPartition.topic(), topicAndPartition.partition())[0];
 
-        //TODO: factor out kafka specific request functionality
-        CamusRequest etlRequest =
-            new EtlRequest(context, topicAndPartition.topic(), Integer.toString(leader.getLeaderId()),
-                topicAndPartition.partition(), leader.getUri());
-        etlRequest.setLatestOffset(latestOffset);
-        etlRequest.setEarliestOffset(earliestOffset);
-        finalRequests.add(etlRequest);
+      for (TopicAndPartition topicAndPartition : topicAndPartitions) {
+          long[] latestOffsets = latestOffsetResponse.offsets(topicAndPartition.topic(), topicAndPartition.partition());
+          long[] earliestOffsets =
+              earliestOffsetResponse.offsets(topicAndPartition.topic(), topicAndPartition.partition());
+
+          if (latestOffsets.length <= 0 || earliestOffsets.length <= 0) {
+              if (latestOffsetResponse.hasError()) {
+                  log.error("Latest offsets for topic " + topicAndPartition.topic()
+                          + " and partition " + topicAndPartition.partition() + " has errors: "
+                          , ErrorMapping.exceptionFor(latestOffsetResponse.errorCode(topicAndPartition.topic(), topicAndPartition.partition())));
+              }
+              if (earliestOffsetResponse.hasError()) {
+                  log.error("Earliest offsets for topic " + topicAndPartition.topic()
+                          + " and partition " + topicAndPartition.partition() + " has errors: "
+                          , ErrorMapping.exceptionFor(earliestOffsetResponse.errorCode(topicAndPartition.topic(), topicAndPartition.partition())));
+              }
+          } else {
+              //TODO: factor out kafka specific request functionality
+              CamusRequest etlRequest =
+                  new EtlRequest(context, topicAndPartition.topic(), Integer.toString(leader.getLeaderId()),
+                          topicAndPartition.partition(), leader.getUri());
+              etlRequest.setLatestOffset(latestOffsets[0]);
+              etlRequest.setEarliestOffset(earliestOffsets[0]);
+              finalRequests.add(etlRequest);
+          }
       }
     }
     return finalRequests;
