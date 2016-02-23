@@ -230,6 +230,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
               new KafkaReader(inputFormat, context, request, CamusJob.getKafkaTimeoutValue(mapperContext),
                   CamusJob.getKafkaBufferSize(mapperContext));
 
+          mapperContext.getCounter("total", "request-time(ms)").increment(reader.getFetchTime());
           decoder = MessageDecoderFactory.createMessageDecoder(context, request.getTopic());
         }
         int count = 0;
@@ -297,7 +298,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
             statusMsg += " max read " + maxMsg;
             context.setStatus(statusMsg);
             log.info(key.getTopic() + " max read " + maxMsg);
-            mapperContext.getCounter("total", "request-time(ms)").increment(reader.getFetchTime());
             closeReader();
           }
 
@@ -307,9 +307,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
           mapperContext.getCounter("total", "decode-time(ms)").increment(decodeTime);
 
-          if (reader != null) {
-            mapperContext.getCounter("total", "request-time(ms)").increment(reader.getFetchTime());
-          }
           return true;
         }
         log.info("Records read : " + count);
