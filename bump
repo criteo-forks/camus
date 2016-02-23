@@ -1,0 +1,10 @@
+#!/bin/bash
+
+version=$(mvn help:evaluate -Dexpression=project.version | grep -v "^\[")
+
+version_next=$(eval echo "$(echo $version | sed 's/\(.*[^0-9]\{1,\}\)\([0-9]\{1,\}\)$/\1$((\2+1))/')")
+mvn versions:set -DnewVersion="$version_next" -DgenerateBackupPoms=false
+
+find . -name pom.xml -exec git add {} \;
+git commit -m "Bump camus criteo version to $version_next"
+
