@@ -324,6 +324,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
   private void closeReader() throws IOException {
     if (reader != null) {
+      mapperContext.getCounter("total", "fetch-request-time(ms)").increment(reader.getTotalFetchTime());
       try {
         reader.close();
       } catch (Exception e) {
