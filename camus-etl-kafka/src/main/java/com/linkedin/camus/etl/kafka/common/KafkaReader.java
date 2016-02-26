@@ -5,11 +5,17 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
+import kafka.api.OffsetRequest;
 import kafka.api.PartitionFetchInfo;
+import kafka.api.PartitionOffsetRequestInfo;
+import kafka.common.ErrorMapping;
+import kafka.common.OffsetMetadataAndError$;
 import kafka.common.TopicAndPartition;
 import kafka.javaapi.FetchRequest;
 import kafka.javaapi.FetchResponse;
+import kafka.javaapi.OffsetResponse;
 import kafka.javaapi.consumer.SimpleConsumer;
 import kafka.javaapi.message.ByteBufferMessageSet;
 import kafka.message.Message;
@@ -135,6 +141,41 @@ public class KafkaReader {
   }
 
   /**
+   * Retry failed FetchRequest for current topic and partition if the offset of the request is out of range in the past.
+   * @param fetchResponse the failed FetchResponse
+   * @param topicAndPartition the current topic and parititon
+   * @return either the given FetchResponse if there is error or the new one
+   */
+  public FetchResponse retryFetchRequestOnOutOfRange(FetchResponse fetchResponse, TopicAndPartition topicAndPartition){
+    // retry only if the fetchresponse replied offset out of range
+    if(fetchResponse.hasError() &&
+            fetchResponse.errorCode(topicAndPartition.topic(), topicAndPartition.partition()) == ErrorMapping.OffsetOutOfRangeCode()){
+      // create a new OffsetRequest
+      Map<TopicAndPartition, PartitionOffsetRequestInfo> offsetRequestInfo = new HashMap<TopicAndPartition, PartitionOffsetRequestInfo>();
+      // Only fetch 1 offset for the current topic + partition
+      offsetRequestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(kafka.api.OffsetRequest.EarliestTime(), 1));
+      // Create offset request
+      kafka.javaapi.OffsetRequest offsetRequest =
+              new kafka.javaapi.OffsetRequest(offsetRequestInfo, OffsetRequest.CurrentVersion(), CamusJob.getKafkaClientName(context));
+      OffsetResponse offsetsBefore = simpleConsumer.getOffsetsBefore(offsetRequest);
+      if(!offsetsBefore.hasError()){
+        long[] offsets = offsetsBefore.offsets(topicAndPartition.topic(), topicAndPartition.partition());
+        // As we fetched only 1 offset we have only 1 offset in the offsets array
+        // If we are out of range in the past retry the FetchRequest with the new earliest offset
+        if(currentOffset < offsets[0]){
+          PartitionFetchInfo partitionFetchInfo = new PartitionFetchInfo(offsets[0], fetchBufferSize);
+          HashMap<TopicAndPartition, PartitionFetchInfo> fetchInfo = new HashMap<TopicAndPartition, PartitionFetchInfo>();
+          fetchInfo.put(topicAndPartition, partitionFetchInfo);
+          FetchRequest fetchRequest = new FetchRequest(CamusJob.getKafkaFetchRequestCorrelationId(context), CamusJob.getKafkaClientName(context),
+                  CamusJob.getKafkaFetchRequestMaxWait(context), CamusJob.getKafkaFetchRequestMinBytes(context), fetchInfo);
+          return simpleConsumer.fetch(fetchRequest);
+        }
+      }
+    }
+    return fetchResponse;
+  }
+
+  /**
    * Creates a fetch request.
    *
    * @return false if there's no more fetches
@@ -160,6 +201,11 @@ public class KafkaReader {
     FetchResponse fetchResponse = null;
     try {
       fetchResponse = simpleConsumer.fetch(fetchRequest);
+
+      if(fetchResponse.hasError()) {
+        retryFetchRequestOnOutOfRange(fetchResponse, topicAndPartition);
+      }
+
       if (fetchResponse.hasError()) {
         log.info("Error encountered during a fetch request from Kafka");
         log.info("Error Code generated : "
