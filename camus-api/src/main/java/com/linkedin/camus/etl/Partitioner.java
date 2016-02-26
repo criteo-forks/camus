@@ -72,5 +72,7 @@ public abstract class Partitioner extends Configured {
     public abstract String getWorkingFileName(JobContext context, String topic, String brokerId, 
         int partitionId, String encodedPartition);
 
-       
+    public void init(JobContext context){
+
+    }
 }

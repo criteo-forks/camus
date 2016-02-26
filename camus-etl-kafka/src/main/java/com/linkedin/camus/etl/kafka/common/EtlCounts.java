@@ -134,7 +134,7 @@ public class EtlCounts {
   }
 
   public EtlKey getLastKey() {
-    return lastKey;
+    return new EtlKey(lastKey);
   }
 
   public void setEventCount(int eventCount) {
@@ -147,12 +147,12 @@ public class EtlCounts {
 
   public void incrementMonitorCount(EtlKey key) {
     long monitorPartition = DateUtils.getPartition(granularity, key.getTime());
-    Source source = new Source(key.getServer(), key.getService(), monitorPartition);
-    if (counts.containsKey(source.toString())) {
-      Source countSource = counts.get(source.toString());
-      countSource.setCount(countSource.getCount() + 1);
-      counts.put(countSource.toString(), countSource);
+    String sourceString = Source.toString(key.getServer(), key.getService(), monitorPartition);
+    if (counts.containsKey(sourceString)) {
+      Source countSource = counts.get(sourceString);
+      countSource.increment();
     } else {
+      Source source = new Source(key.getServer(), key.getService(), monitorPartition);
       source.setCount(1);
       counts.put(source.toString(), source);
     }
@@ -165,7 +165,7 @@ public class EtlCounts {
       firstTimestamp = key.getTime();
     }
 
-    lastKey = new EtlKey(key);
+    lastKey = key;
     eventCount++;
   }
 

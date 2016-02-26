@@ -45,28 +45,31 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
     fs.mkdirs(path);
   }
 
-  public void addCounts(EtlKey key) throws IOException {
-    String workingFileName = EtlMultiOutputFormat.getWorkingFileName(context, key);
+  public void addCounts(EtlKey key, String workingFileName) throws IOException {
     if (!counts.containsKey(workingFileName))
       counts.put(workingFileName,
-          new EtlCounts(key.getTopic(), EtlMultiOutputFormat.getMonitorTimeGranularityMs(context)));
-    counts.get(workingFileName).incrementMonitorCount(key);
+              new EtlCounts(key.getTopic(), EtlMultiOutputFormat.getMonitorTimeGranularityMs(context)));
+    if (EtlMultiOutputFormat.isRunTrackingPost(context)) {
+      counts.get(workingFileName).incrementMonitorCount(key);
+    } else {
+      counts.get(workingFileName).setLastKey(key);
+    }
     addOffset(key);
   }
 
   public void addOffset(EtlKey key) {
-    String topicPart = key.getTopic() + "-" + key.getLeaderId() + "-" + key.getPartition();
-    EtlKey offsetKey = new EtlKey(key);
-
+    String topicPart = new StringBuilder(key.getTopic()).append('-').append(key.getLeaderId()).append('-').append(key.getPartition()).toString();
     if (offsets.containsKey(topicPart)) {
-      long avgSize = offsets.get(topicPart).getMessageSize() * eventCounts.get(topicPart) + key.getMessageSize();
-      avgSize /= eventCounts.get(topicPart) + 1;
-      offsetKey.setMessageSize(avgSize);
+      Long eventCount = eventCounts.get(topicPart);
+      long avgSize = offsets.get(topicPart).getMessageSize() * eventCount + key.getMessageSize();
+      avgSize /= eventCount + 1;
+      offsets.get(topicPart).setMessageSize(avgSize);
+      eventCounts.put(topicPart, eventCount + 1);
     } else {
-      eventCounts.put(topicPart, 0l);
+      EtlKey offsetKey = new EtlKey(key);
+      eventCounts.put(topicPart, 1l);
+      offsets.put(topicPart, offsetKey);
     }
-    eventCounts.put(topicPart, eventCounts.get(topicPart) + 1);
-    offsets.put(topicPart, offsetKey);
   }
 
   public EtlMultiOutputCommitter(Path outputPath, TaskAttemptContext context, Logger log) throws IOException {

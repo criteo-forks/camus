@@ -21,7 +21,7 @@ public class CamusWrapper<R> {
     }
 
     public CamusWrapper(R record, long timestamp) {
-        this(record, timestamp, "unknown_server", "unknown_service");
+        this(record, timestamp, new MapWritable());
     }
 
     public CamusWrapper(R record, long timestamp, MapWritable map) {
@@ -30,6 +30,7 @@ public class CamusWrapper<R> {
         this.partitionMap = map;
     }
 
+    @Deprecated
     public CamusWrapper(R record, long timestamp, String server, String service) {
         this(record, timestamp, new MapWritable());
         put(new Text("server"), new Text(server));

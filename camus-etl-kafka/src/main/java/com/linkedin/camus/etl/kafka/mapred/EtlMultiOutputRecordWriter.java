@@ -81,9 +81,9 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
           currentTopic = key.getTopic();
         }
 
-        committer.addCounts(key);
         CamusWrapper value = (CamusWrapper) val;
         String workingFileName = EtlMultiOutputFormat.getWorkingFileName(context, key);
+        committer.addCounts(key, workingFileName);
         if (!dataWriters.containsKey(workingFileName)) {
           dataWriters.put(workingFileName, getDataRecordWriter(context, workingFileName, value));
           log.info("Writing to data file: " + workingFileName);

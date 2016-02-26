@@ -244,8 +244,6 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     builder.append(offset);
     builder.append(" msgSize=");
     builder.append(getMessageSize());
-    builder.append(" server=");
-    builder.append(server);
     builder.append(" checksum=");
     builder.append(checksum);
     builder.append(" time=");

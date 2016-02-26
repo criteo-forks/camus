@@ -189,21 +189,15 @@ public class EtlMultiOutputFormat extends FileOutputFormat<EtlKey, Object> {
     job.getConfiguration().setClass(ETL_DEFAULT_PARTITIONER_CLASS, cls, Partitioner.class);
   }
 
-  public static Partitioner getDefaultPartitioner(JobContext job) {
-    return ReflectionUtils.newInstance(
-        job.getConfiguration().getClass(ETL_DEFAULT_PARTITIONER_CLASS, DefaultPartitioner.class, Partitioner.class),
-        job.getConfiguration());
-  }
-
   public static Partitioner getPartitioner(JobContext job, String topicName) throws IOException {
     String customPartitionerProperty = ETL_DEFAULT_PARTITIONER_CLASS + "." + topicName;
     if (partitionersByTopic.get(customPartitionerProperty) == null) {
-      List<Partitioner> partitioners = new ArrayList<Partitioner>();
-      if (partitioners.isEmpty()) {
-        return getDefaultPartitioner(job);
-      } else {
-        partitionersByTopic.put(customPartitionerProperty, partitioners.get(0));
-      }
+      Class<? extends Partitioner> partitioner = job.getConfiguration().getClass(customPartitionerProperty,
+              job.getConfiguration().getClass(ETL_DEFAULT_PARTITIONER_CLASS, DefaultPartitioner.class, Partitioner.class),
+              Partitioner.class);
+      Partitioner partitionerInstance = ReflectionUtils.newInstance(partitioner, job.getConfiguration());
+      partitionerInstance.init(job);
+      partitionersByTopic.put(customPartitionerProperty, partitionerInstance);
     }
     return partitionersByTopic.get(customPartitionerProperty);
   }

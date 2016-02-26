@@ -1,5 +1,7 @@
 package com.linkedin.camus.etl.kafka.common;
 
+import com.google.common.base.Objects;
+
 public class Source {
 
   private long count;
@@ -49,20 +51,42 @@ public class Source {
     this.start = start;
   }
 
+  public void increment(long inc) {
+    this.count += inc;
+  }
+
+  public void increment() {
+    this.increment(1);
+  }
+
   @Override
   public int hashCode() {
-
-    return (server + service + start).hashCode();
+    return Objects.hashCode(server, service, start);
   }
 
   @Override
   public boolean equals(Object obj) {
-    return this.hashCode() == obj.hashCode();
+    if(obj == null){
+      return false;
+    } else {
+      if( obj instanceof Source){
+        Source other = (Source) obj;
+        return Objects.equal(this.server, other.server) && Objects.equal(this.service, other.service) && this.start == other.start;
+      } else {
+        return false;
+      }
+    }
+  }
+
+  public static String toString(String server, String service, long start) {
+    StringBuilder sb = new StringBuilder('{');
+    sb.append(server).append(',').append(service).append(',').append(start).append('}');
+    return sb.toString();
   }
 
   @Override
   public String toString() {
-    return "{" + server + "," + service + "," + start + "}";
+    return toString(server, service, start);
   }
 
 }

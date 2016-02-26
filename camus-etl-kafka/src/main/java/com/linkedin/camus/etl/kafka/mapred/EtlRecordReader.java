@@ -183,7 +183,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
       statusMsg += " max read " + maxMsg;
       context.setStatus(statusMsg);
       log.info(key.getTopic() + " max read " + maxMsg);
-      mapperContext.getCounter("total", "request-time(ms)").increment(reader.getFetchTime());
       closeReader();
 
       mapperContext.write(key, new ExceptionWritable("Topic not fully pulled, max task time reached" + maxMsg));
@@ -230,7 +229,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
               new KafkaReader(inputFormat, context, request, CamusJob.getKafkaTimeoutValue(mapperContext),
                   CamusJob.getKafkaBufferSize(mapperContext));
 
-          mapperContext.getCounter("total", "request-time(ms)").increment(reader.getFetchTime());
           decoder = MessageDecoderFactory.createMessageDecoder(context, request.getTopic());
         }
         int count = 0;
@@ -324,7 +322,8 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
   private void closeReader() throws IOException {
     if (reader != null) {
-      mapperContext.getCounter("total", "fetch-request-time(ms)").increment(reader.getTotalFetchTime());
+      mapperContext.getCounter("total", "request-time(ms)").increment(reader.getTotalFetchTime());
+      mapperContext.getCounter("total", "reader-closed").increment(1);
       try {
         reader.close();
       } catch (Exception e) {
