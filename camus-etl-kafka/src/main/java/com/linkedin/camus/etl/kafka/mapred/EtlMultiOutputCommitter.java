@@ -37,7 +37,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
   private TaskAttemptContext context;
   private final RecordWriterProvider recordWriterProvider;
   private Logger log;
-  
+
   private void mkdirs(FileSystem fs, Path path) throws IOException {
     if (! fs.exists(path.getParent())) {
       mkdirs(fs, path.getParent());
@@ -60,10 +60,12 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
   public void addOffset(EtlKey key) {
     String topicPart = new StringBuilder(key.getTopic()).append('-').append(key.getLeaderId()).append('-').append(key.getPartition()).toString();
     if (offsets.containsKey(topicPart)) {
+      EtlKey offsetKey = offsets.get(topicPart);
       Long eventCount = eventCounts.get(topicPart);
-      long avgSize = offsets.get(topicPart).getMessageSize() * eventCount + key.getMessageSize();
+      long avgSize = offsetKey.getMessageSize() * eventCount + key.getMessageSize();
       avgSize /= eventCount + 1;
-      offsets.get(topicPart).setMessageSize(avgSize);
+      offsetKey.setMessageSize(avgSize);
+      offsetKey.setOffset(key.getOffset());
       eventCounts.put(topicPart, eventCount + 1);
     } else {
       EtlKey offsetKey = new EtlKey(key);

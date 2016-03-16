@@ -138,7 +138,7 @@ public class CamusJob extends Configured implements Tool {
     timingMap.put(name, (timingMap.get(name) == null ? 0 : timingMap.get(name)) + System.currentTimeMillis());
   }
 
-  private Job createJob(Properties props) throws IOException {
+  public Job createJob(Properties props) throws IOException {
     Job job;
     if (getConf() == null) {
       setConf(new Configuration());

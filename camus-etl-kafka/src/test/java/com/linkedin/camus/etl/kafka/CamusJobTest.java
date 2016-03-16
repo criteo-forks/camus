@@ -4,21 +4,14 @@ import static org.hamcrest.core.Is.is;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
-
+import com.google.gson.Gson;
 import com.linkedin.camus.etl.kafka.coders.FailDecoder;
-import kafka.javaapi.producer.Producer;
-import kafka.producer.KeyedMessage;
-import kafka.producer.ProducerConfig;
-import kafka.serializer.StringEncoder;
+import com.linkedin.camus.etl.kafka.coders.JsonStringMessageDecoder;
+import com.linkedin.camus.etl.kafka.common.EtlKey;
+import com.linkedin.camus.etl.kafka.common.SequenceFileRecordWriterProvider;
+import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
+import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
+import com.linkedin.camus.workallocater.CamusRequest;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -27,19 +20,34 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.JobID;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.task.JobContextImpl;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import com.google.gson.Gson;
-import com.linkedin.camus.etl.kafka.coders.JsonStringMessageDecoder;
-import com.linkedin.camus.etl.kafka.common.SequenceFileRecordWriterProvider;
-import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
-import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
+
+import kafka.javaapi.producer.Producer;
+import kafka.producer.KeyedMessage;
+import kafka.producer.ProducerConfig;
+import kafka.serializer.StringEncoder;
 
 
 public class CamusJobTest {
@@ -59,6 +67,7 @@ public class CamusJobTest {
   private static FileSystem fs;
   private static Gson gson;
   private static Map<String, List<Message>> messagesWritten;
+  private static final long NUMBER_OF_MESSAGE_TO_INSERT = 10l;
 
   @BeforeClass
   public static void beforeClass() throws IOException {
@@ -68,9 +77,9 @@ public class CamusJobTest {
 
     // You can't delete messages in Kafka so just writing a set of known messages that can be used for testing
     messagesWritten = new HashMap<String, List<Message>>();
-    messagesWritten.put(TOPIC_1, writeKafka(TOPIC_1, 10));
-    messagesWritten.put(TOPIC_2, writeKafka(TOPIC_2, 10));
-    messagesWritten.put(TOPIC_3, writeKafka(TOPIC_3, 10));
+    messagesWritten.put(TOPIC_1, writeKafka(TOPIC_1, NUMBER_OF_MESSAGE_TO_INSERT));
+    messagesWritten.put(TOPIC_2, writeKafka(TOPIC_2, NUMBER_OF_MESSAGE_TO_INSERT));
+    messagesWritten.put(TOPIC_3, writeKafka(TOPIC_3, NUMBER_OF_MESSAGE_TO_INSERT));
   }
 
   @AfterClass
@@ -121,6 +130,27 @@ public class CamusJobTest {
     folder.delete();
   }
 
+  private Map<CamusRequest, EtlKey> fetchLatestOffset() throws Exception {
+    // Read back lastest camus history offsets
+    EtlInputFormat inputFormat = new EtlInputFormat();
+    Job hJob = job.createJob(props);
+    FileSystem fs = FileSystem.get(hJob.getConfiguration());
+    Path execHistory = new Path(folder.getRoot().getAbsolutePath() + EXECUTION_HISTORY_PATH);
+    FileStatus[] executions = fs.listStatus(execHistory);
+    Arrays.sort(executions, new Comparator<FileStatus>() {
+      public int compare(FileStatus f1, FileStatus f2) {
+        return f1.getPath().getName().compareTo(f2.getPath().getName());
+      }
+    });
+    // Read only lastest execution history folder
+    assertThat(executions.length > 0, is(true));
+    Path previous = executions[executions.length - 1].getPath();
+    FileInputFormat.setInputPaths(hJob, previous);
+    JobContext context = new JobContextImpl(hJob.getConfiguration(), new JobID());
+    Map<CamusRequest, EtlKey> previousOffsets = inputFormat.getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
+    return previousOffsets;
+  }
+    
   @Test
   public void runJob() throws Exception {
     job.run();
@@ -128,6 +158,14 @@ public class CamusJobTest {
     assertCamusContains(TOPIC_1);
     assertCamusContains(TOPIC_2);
     assertCamusContains(TOPIC_3);
+
+    Map<CamusRequest, EtlKey> previousOffsets = fetchLatestOffset();
+    assertThat(previousOffsets.values().size(), is(3));
+
+    // Assert that offset are corrects
+    for(EtlKey key : previousOffsets.values()) {
+      assertThat(key.getOffset(), is(NUMBER_OF_MESSAGE_TO_INSERT));
+    }
 
     // Run a second time (no additional messages should be found)
     job = new CamusJob(props);
@@ -195,15 +233,15 @@ public class CamusJobTest {
     assertTrue(readMessages(topic).containsAll(messages));
   }
 
-  private static List<Message> writeKafka(String topic, int numOfMessages) {
+  private static List<Message> writeKafka(String topic, long numOfMessages) {
 
     List<Message> messages = new ArrayList<Message>();
     List<KeyedMessage<String, String>> kafkaMessages = new ArrayList<KeyedMessage<String, String>>();
 
-    for (int i = 0; i < numOfMessages; i++) {
+    for (long i = 0; i < numOfMessages; i++) {
       Message msg = new Message(RANDOM.nextInt());
       messages.add(msg);
-      kafkaMessages.add(new KeyedMessage<String, String>(topic, Integer.toString(i), gson.toJson(msg)));
+      kafkaMessages.add(new KeyedMessage<String, String>(topic, Long.toString(i), gson.toJson(msg)));
     }
 
     Properties producerProps = cluster.getProps();

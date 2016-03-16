@@ -488,7 +488,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     writer.close();
   }
 
-  private Map<CamusRequest, EtlKey> getPreviousOffsets(Path[] inputs, JobContext context) throws IOException {
+  public Map<CamusRequest, EtlKey> getPreviousOffsets(Path[] inputs, JobContext context) throws IOException {
     Map<CamusRequest, EtlKey> offsetKeysMap = new HashMap<CamusRequest, EtlKey>();
     for (Path input : inputs) {
       FileSystem fs = input.getFileSystem(context.getConfiguration());

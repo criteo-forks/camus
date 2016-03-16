@@ -23,6 +23,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
   public static final Text SERVER = new Text("server");
   public static final Text SERVICE = new Text("service");
   public static EtlKey DUMMY_KEY = new EtlKey();
+  private static final Text MESSAGE_SIZE_KEY = new Text("message.size");
 
   private String leaderId = "";
   private int partition = 0;
@@ -146,16 +147,14 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
   @Override
   public long getMessageSize() {
-    Text key = new Text("message.size");
-    if (this.partitionMap.containsKey(key))
-      return ((LongWritable) this.partitionMap.get(key)).get();
+    if (this.partitionMap.containsKey(MESSAGE_SIZE_KEY))
+      return ((LongWritable) this.partitionMap.get(MESSAGE_SIZE_KEY)).get();
     else
       return 1024; //default estimated size
   }
 
   public void setMessageSize(long messageSize) {
-    Text key = new Text("message.size");
-    put(key, new LongWritable(messageSize));
+    put(MESSAGE_SIZE_KEY, new LongWritable(messageSize));
   }
 
   public void put(Writable key, Writable value) {
