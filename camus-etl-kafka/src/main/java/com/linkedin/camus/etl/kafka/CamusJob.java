@@ -369,9 +369,12 @@ public class CamusJob extends Configured implements Tool {
       log.error(entry.getValue().toString());
     }
 
-    Path newHistory = new Path(execHistory, executionDate);
-    log.info("Moving execution to history : " + newHistory);
-    fs.rename(newExecutionOutput, newHistory);
+    // Only commit offset if the post job task is successful.
+    if(postJobTask()) {
+      Path newHistory = new Path(execHistory, executionDate);
+      log.info("Moving execution to history : " + newHistory);
+      fs.rename(newExecutionOutput, newHistory);
+    }
 
     log.info("Job finished");
     stopTiming("commit");
@@ -397,6 +400,14 @@ public class CamusJob extends Configured implements Tool {
         && props.getProperty(ETL_FAIL_ON_ERRORS, Boolean.FALSE.toString()).equalsIgnoreCase(Boolean.TRUE.toString())) {
       throw new RuntimeException("Camus saw errors, check stderr");
     }
+  }
+
+  /**
+   * By default this does nothing
+   * @return true if the post job task is successful
+   */
+  public boolean postJobTask() throws IOException {
+    return true;
   }
 
   public void cancel() throws IOException {
