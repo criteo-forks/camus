@@ -131,11 +131,15 @@ public class CamusJobTest {
   }
 
   private Map<CamusRequest, EtlKey> fetchLatestOffset() throws Exception {
+      return fetchLatestOffset(job, props);
+  }
+
+  public static Map<CamusRequest, EtlKey> fetchLatestOffset(CamusJob job, Properties props) throws Exception {
     // Read back lastest camus history offsets
     EtlInputFormat inputFormat = new EtlInputFormat();
     Job hJob = job.createJob(props);
     FileSystem fs = FileSystem.get(hJob.getConfiguration());
-    Path execHistory = new Path(folder.getRoot().getAbsolutePath() + EXECUTION_HISTORY_PATH);
+    Path execHistory = new Path(job.getConf().get(CamusJob.ETL_EXECUTION_HISTORY_PATH));
     FileStatus[] executions = fs.listStatus(execHistory);
     Arrays.sort(executions, new Comparator<FileStatus>() {
       public int compare(FileStatus f1, FileStatus f2) {
@@ -150,7 +154,7 @@ public class CamusJobTest {
     Map<CamusRequest, EtlKey> previousOffsets = inputFormat.getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
     return previousOffsets;
   }
-    
+
   @Test
   public void runJob() throws Exception {
     job.run();
