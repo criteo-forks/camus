@@ -63,6 +63,8 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     errorWriter.close();
   }
 
+
+
   @Override
   public void write(EtlKey key, Object val) throws IOException, InterruptedException {
     if (val instanceof CamusWrapper<?>) {
@@ -82,13 +84,8 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
         }
 
         CamusWrapper value = (CamusWrapper) val;
-        String workingFileName = EtlMultiOutputFormat.getWorkingFileName(context, key);
-        committer.addCounts(key, workingFileName);
-        if (!dataWriters.containsKey(workingFileName)) {
-          dataWriters.put(workingFileName, getDataRecordWriter(context, workingFileName, value));
-          log.info("Writing to data file: " + workingFileName);
-        }
-        dataWriters.get(workingFileName).write(key, value);
+        RecordWriter<IEtlKey, CamusWrapper> dataWriter = getDataWriter(key, value);
+        dataWriter.write(key, value);
       }
     } else if (val instanceof ExceptionWritable) {
       committer.addOffset(key);
@@ -97,6 +94,21 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     } else {
       log.warn("Unknow type of record: " + val);
     }
+  }
+
+  public void createEmptyDataWriter(EtlKey key, CamusWrapper value) throws IOException, InterruptedException {
+    getDataWriter(key, value);
+  }
+
+  private RecordWriter<IEtlKey, CamusWrapper> getDataWriter(EtlKey key, CamusWrapper value) throws IOException,
+          InterruptedException {
+    String workingFileName = EtlMultiOutputFormat.getWorkingFileName(context, key);
+    committer.addCounts(key, workingFileName);
+    if (!dataWriters.containsKey(workingFileName)) {
+      dataWriters.put(workingFileName, getDataRecordWriter(context, workingFileName, value));
+      log.info("Writing to data file: " + workingFileName);
+    }
+    return dataWriters.get(workingFileName);
   }
 
   private RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(TaskAttemptContext context, String fileName,
