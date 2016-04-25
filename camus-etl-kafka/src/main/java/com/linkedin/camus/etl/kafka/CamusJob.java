@@ -369,11 +369,17 @@ public class CamusJob extends Configured implements Tool {
       log.error(entry.getValue().toString());
     }
 
-    // Only commit offset if the post job task is successful.
-    if(postJobTask()) {
-      Path newHistory = new Path(execHistory, executionDate);
-      log.info("Moving execution to history : " + newHistory);
-      fs.rename(newExecutionOutput, newHistory);
+    if(job.isSuccessful()) {
+      // Only commit offset if the post job task is successful.
+      if (postJobTask()) {
+        Path newHistory = new Path(execHistory, executionDate);
+        log.info("Moving execution to history : " + newHistory);
+        fs.rename(newExecutionOutput, newHistory);
+      } else {
+        log.error("post job task failed");
+      }
+    } else {
+      log.error("job failed");
     }
 
     log.info("Job finished");
