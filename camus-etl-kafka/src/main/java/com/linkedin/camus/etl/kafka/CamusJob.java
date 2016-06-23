@@ -226,7 +226,7 @@ public class CamusJob extends Configured implements Tool {
     run(EtlInputFormat.class, EtlMultiOutputFormat.class);
   }
 
-  public void preJobTask(Path execBasePath, Path execHistory) {
+  public void preJobTask(Path execBasePath, Path execHistory) throws IOException {
   }
   
   public void run(Class<? extends InputFormat> inputFormatClass,
