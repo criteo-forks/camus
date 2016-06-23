@@ -225,6 +225,9 @@ public class CamusJob extends Configured implements Tool {
   public void run() throws Exception {
     run(EtlInputFormat.class, EtlMultiOutputFormat.class);
   }
+
+  public void preJobTask(Path execBasePath, Path execHistory) {
+  }
   
   public void run(Class<? extends InputFormat> inputFormatClass,
                   Class<? extends OutputFormat> outputFormatClass) throws Exception {
@@ -250,6 +253,8 @@ public class CamusJob extends Configured implements Tool {
       log.info("The history base path does not exist. Creating the directory.");
       fs.mkdirs(execHistory);
     }
+
+    preJobTask(execBasePath, execHistory);
 
     // enforcing max retention on the execution directories to avoid
     // exceeding HDFS quota. retention is set to a percentage of available
