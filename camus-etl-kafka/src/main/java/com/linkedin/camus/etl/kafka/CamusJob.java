@@ -371,7 +371,7 @@ public class CamusJob extends Configured implements Tool {
 
     if(job.isSuccessful()) {
       // Only commit offset if the post job task is successful.
-      if (postJobTask()) {
+      if (postJobTask(job)) {
         Path newHistory = new Path(execHistory, executionDate);
         log.info("Moving execution to history : " + newHistory);
         fs.rename(newExecutionOutput, newHistory);
@@ -412,7 +412,7 @@ public class CamusJob extends Configured implements Tool {
    * By default this does nothing
    * @return true if the post job task is successful
    */
-  public boolean postJobTask() throws IOException {
+  public boolean postJobTask(Job job) throws IOException {
     return true;
   }
 
