@@ -333,7 +333,13 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
               Integer.toString(Math.min(numMapFit, numMapMax)));
     }
 
-    log.info("The requests from kafka metadata are: \n" + finalRequests);
+    if (log.isInfoEnabled()) {
+      StringBuilder sb = new StringBuilder();
+      for (CamusRequest req : finalRequests) {
+        sb.append(req).append("\n");
+      }
+      log.info("The requests from kafka metadata are: \n" + sb.toString());
+    }
     writeRequests(finalRequests, context);
     Map<CamusRequest, EtlKey> offsetKeys = getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
     HashSet<String> alreadySeen = getAlreadySeenTopics(offsetKeys);
