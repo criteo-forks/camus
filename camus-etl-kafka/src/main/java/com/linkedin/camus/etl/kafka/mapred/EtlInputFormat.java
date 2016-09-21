@@ -65,7 +65,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
   public static final String KAFKA_WHITELIST_TOPIC = "kafka.whitelist.topics";
 
   public static final String KAFKA_MOVE_TO_LAST_OFFSET_LIST = "kafka.move.to.last.offset.list";
-  public static final String KAFKA_MOVE_TO_EARLIEST_OFFSET = "kafka.move.to.earliest.offset";
+  public static final String KAFKA_MOVE_TO_CLOSEST_OFFSET = "kafka.move.to.closest.offset";
 
   public static final String KAFKA_MOVE_TO_LAST_OFFSET_ON_FIRST_RUN = "kafka.move.to.last.offset.on.first.run";
 
@@ -371,25 +371,39 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
           log.error("The current offset was found to be more than the latest offset: " + request);
         }
 
-        boolean move_to_earliest_offset = context.getConfiguration().getBoolean(KAFKA_MOVE_TO_EARLIEST_OFFSET, false);
+        boolean moveToClosestOffset = context.getConfiguration().getBoolean(KAFKA_MOVE_TO_CLOSEST_OFFSET, false);
         boolean offsetUnset = request.getOffset() == EtlRequest.DEFAULT_OFFSET;
-        log.info("move_to_earliest: " + move_to_earliest_offset + " offset_unset: " + offsetUnset);
+        log.info("move_to_closest: " + moveToClosestOffset + " offset_unset: " + offsetUnset);
+
+        // If the offset is before the earliest offset of the partition and the setting move_to_closest_offset is on,
+        // we begin from the earliest offset.
         // When the offset is unset, it means it's a new topic/partition, we also need to consume the earliest offset
-        if (move_to_earliest_offset || offsetUnset) {
+        if ((request.getOffset() < request.getEarliestOffset() && moveToClosestOffset) || offsetUnset) {
           log.error("Moving to the earliest offset available");
           request.setOffset(request.getEarliestOffset());
-          offsetKeys.put(
-              request,
-              //TODO: factor out kafka specific request functionality
-              new EtlKey(request.getTopic(), ((EtlRequest) request).getLeaderId(), request.getPartition(), 0, request
-                  .getOffset()));
+        } else if (request.getLastOffset() < request.getOffset() && moveToClosestOffset) {
+          // If the offset is behind the latest offset and the setting move_to_closest_offset is on,
+          // move the offset to the latest available offset.
+          log.error("The previous offset is behind the latest offset of the partition, " +
+                    "moving to the latest offset according to the setting.");
+          request.setOffset(request.getLastOffset());
         } else {
-          log.error("Offset range from kafka metadata is outside the previously persisted offset," +
-                    " please check whether kafka cluster configuration is correct." +
-                    " You can also specify config parameter: " + KAFKA_MOVE_TO_EARLIEST_OFFSET +
-                    " to start processing from earliest kafka metadata offset.");
+          log.error(new StringBuilder()
+                    .append("Offset range from kafka metadata is outside the previously persisted offset,")
+                    .append(" please check whether kafka cluster configuration is correct.")
+                    .append(" You can also specify config parameter: ").append(KAFKA_MOVE_TO_CLOSEST_OFFSET)
+                    .append(" to start processing from earliest kafka metadata offset.")
+                    .append(" if the previous offset is before that position")
+                    .append(" or to start processing from the last kafka metadata offset")
+                    .append(" if behind that position")
+                    .toString());
           throw new IOException("Offset from kafka metadata is out of range: " + request);
         }
+        offsetKeys.put(
+            request,
+            //TODO: factor out kafka specific request functionality
+            new EtlKey(request.getTopic(), ((EtlRequest) request).getLeaderId(), request.getPartition(), 0, request
+                       .getOffset()));
       }
       log.info(request);
     }
@@ -407,8 +421,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     return allocator.allocateWork(finalRequests, context);
   }
-
-
 
   private HashSet<String> getAlreadySeenTopics(Map<CamusRequest, EtlKey> offsetKeys) {
     HashSet<String> topics = new HashSet<String>();
