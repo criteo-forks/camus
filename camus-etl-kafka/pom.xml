@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>com.linkedin.camus</groupId>
 		<artifactId>camus-parent</artifactId>
-		<version>1.0-criteo21</version>
+		<version>1.0-criteo22</version>
 	</parent>
 
 	<artifactId>camus-etl-kafka</artifactId>
@@ -35,7 +35,7 @@
 		<dependency>
 			<groupId>org.apache.kafka</groupId>
 			<artifactId>kafka_2.10</artifactId>
-			<version>0.8.2.0-cp</version>
+			<version>0.10.0.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.github.sgroschupf</groupId>

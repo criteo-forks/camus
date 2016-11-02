@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import kafka.cluster.Broker;
+import kafka.cluster.BrokerEndPoint;
 import kafka.javaapi.FetchRequest;
 import kafka.javaapi.FetchResponse;
 import kafka.javaapi.OffsetRequest;
@@ -29,6 +29,7 @@ import kafka.javaapi.consumer.SimpleConsumer;
 import kafka.javaapi.message.ByteBufferMessageSet;
 import kafka.message.Message;
 import kafka.producer.KeyedMessage;
+import org.joda.time.DateTime;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -158,8 +159,8 @@ public class CamusJobTestWithMock {
     PartitionMetadata pMeta = EasyMock.createMock(PartitionMetadata.class);
     _mocks.add(pMeta);
     EasyMock.expect(pMeta.errorCode()).andReturn((short)0).anyTimes();
-    Broker broker = new Broker(0, "localhost", 2121);
-    EasyMock.expect(pMeta.leader()).andReturn(broker).anyTimes();
+    BrokerEndPoint brokerEndPoint = new BrokerEndPoint(0,"localhost",2121);
+    EasyMock.expect(pMeta.leader()).andReturn(brokerEndPoint).anyTimes();
     EasyMock.expect(pMeta.partitionId()).andReturn(PARTITION_1_ID).anyTimes();
     List<PartitionMetadata> partitionMetadatas = new ArrayList<PartitionMetadata>();
     partitionMetadatas.add(pMeta);    
@@ -189,7 +190,9 @@ public class CamusJobTestWithMock {
     MyMessage myMessage = myMessages.get(0);
     String payload = gson.toJson(myMessage);
     String msgKey = Integer.toString(myMessage.number);
-    Message message = new Message(payload.getBytes(), msgKey.getBytes());
+    long timestamp = new DateTime().getMillis() / 1000;
+    byte magicvalue = 0;
+    Message message = new Message(payload.getBytes(), msgKey.getBytes(),  timestamp, magicvalue);
     List<Message> messages = new ArrayList<Message>();
     messages.add(message);
     ByteBufferMessageSet messageSet = new ByteBufferMessageSet(messages);

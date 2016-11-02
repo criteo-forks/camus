@@ -4,17 +4,21 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
+import kafka.metrics.KafkaMetricsReporter;
 import kafka.server.KafkaConfig;
 import kafka.server.KafkaServer;
 import kafka.utils.Time;
-import kafka.utils.Utils;
+import kafka.utils.CoreUtils;
+import scala.Option;
 
-import org.apache.zookeeper.server.NIOServerCnxn;
+import org.apache.zookeeper.server.NIOServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
 
 
@@ -88,7 +92,8 @@ public class KafkaCluster {
   }
 
   private static KafkaServer startBroker(Properties props) {
-    KafkaServer server = new KafkaServer(new KafkaConfig(props), new SystemTime());
+    Option<String> noThreadNamePrefix = Option.empty();
+    KafkaServer server = new KafkaServer(KafkaConfig.fromProps(props), new SystemTime(), noThreadNamePrefix);
     server.startup();
     return server;
   }
@@ -117,20 +122,18 @@ public class KafkaCluster {
     private final int port;
     private final File snapshotDir;
     private final File logDir;
-    private final NIOServerCnxn.Factory factory;
+    private final NIOServerCnxnFactory factory;
 
     /**
      * Constructs an embedded Zookeeper instance.
-     * 
-     * @param connectString Zookeeper connection string.
-     * 
      * @throws IOException if an error occurs during Zookeeper initialization.
      */
     public EmbeddedZookeeper() throws IOException {
       this.port = getAvailablePort();
       this.snapshotDir = getTempDir();
       this.logDir = getTempDir();
-      this.factory = new NIOServerCnxn.Factory(new InetSocketAddress("127.0.0.1", port), 1024);
+      this.factory = new NIOServerCnxnFactory();
+      factory.configure(new InetSocketAddress("127.0.0.1", port), 1024);
 
       try {
         int tickTime = 500;
@@ -144,9 +147,9 @@ public class KafkaCluster {
      * Shuts down the embedded Zookeeper instance.
      */
     public void shutdown() {
-      factory.shutdown();
-      Utils.rm(snapshotDir);
-      Utils.rm(logDir);
+        factory.shutdown();
+        List<String> directories = Arrays.asList(snapshotDir.getAbsolutePath(), logDir.getAbsolutePath());
+        CoreUtils.delete(scala.collection.JavaConversions.asScalaBuffer(directories).seq());
     }
 
     public String getConnection() {
