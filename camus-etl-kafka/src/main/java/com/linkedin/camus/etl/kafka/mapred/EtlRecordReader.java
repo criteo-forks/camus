@@ -193,6 +193,9 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
       while ((request = (EtlRequest) split.popRequest()) != null) {
         key.set(request.getTopic(), request.getLeaderId(), request.getPartition(), request.getOffset(),
             request.getOffset(), 0);
+        //Set lag on partitions with request
+        mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).increment(request.getLastOffset() - request.getOffset());
+        mapperContext.getCounter("offsetlag_per_brokerid", key.getLeaderId()).increment(request.getLastOffset() - request.getOffset());
         mapperContext.write(key, new ExceptionWritable("Topic not fully pulled, max task time reached"));
       }
 
@@ -231,14 +234,17 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
                   CamusJob.getKafkaBufferSize(mapperContext));
 
           decoder = MessageDecoderFactory.createMessageDecoder(context, request.getTopic());
+          mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).setValue(request.getLastOffset() - request.getOffset());
+          mapperContext.getCounter("offsetlag_per_brokerid", key.getLeaderId()).setValue(request.getLastOffset() - request.getOffset());
         }
         int count = 0;
+        long messagebytes = 0;
         AtomicReference<Message> messageRef = new AtomicReference<Message>();
         while (reader.getNext(key, msgValue, msgKey, messageRef)) {
           readBytes += key.getMessageSize();
           count++;
+          messagebytes += msgValue.getLength();
           context.progress();
-          mapperContext.getCounter("total", "data-read").increment(msgValue.getLength());
           mapperContext.getCounter("total", "event-count").increment(1);
           byte[] bytes = getBytes(msgValue);
           byte[] keyBytes = getBytes(msgKey);
@@ -308,15 +314,31 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
             statusMsg += " max read " + maxMsg;
             context.setStatus(statusMsg);
             log.info(key.getTopic() + " max read " + maxMsg);
+            //Here lag have to be decreased on  "count" messages for key
+            mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).increment(-count);
+            mapperContext.getCounter("offsetlag_per_brokerid", key.getLeaderId()).increment(-count);
+
             closeReader();
           }
 
           long secondTime = System.currentTimeMillis();
           value = wrapper;
           long decodeTime = ((secondTime - tempTime));
+          mapperContext.getCounter("total", "data-read").increment(messagebytes);
+
+          mapperContext.getCounter("messages_per_brokerid", key.getLeaderId()).increment(count);
+          mapperContext.getCounter("messages_per_partition", Integer.toString(key.getPartition())).increment(count);
+
+          mapperContext.getCounter("bytes_per_partition", Integer.toString(key.getPartition())).increment(messagebytes);
+          mapperContext.getCounter("bytes_per_brokerid", key.getLeaderId()).increment(messagebytes);
+
+          //If we reach this part, then no lag on current key
+          mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).setValue(0);
+          mapperContext.getCounter("offsetlag_per_brokerid", key.getLeaderId()).setValue(0);
+
+          mapperContext.getCounter("timestamp_per_partition", Integer.toString(key.getPartition())).setValue(curTimeStamp/1000);
 
           mapperContext.getCounter("total", "decode-time(ms)").increment(decodeTime);
-
           return true;
         }
         log.info("Records read : " + count);
