@@ -349,14 +349,15 @@ public class CamusJob extends Configured implements Tool {
 
     // dump all counters
     Counters counters = job.getCounters();
-    for (String groupName : counters.getGroupNames()) {
-      CounterGroup group = counters.getGroup(groupName);
-      log.info("Group: " + group.getDisplayName());
-      for (Counter counter : group) {
-        log.info(counter.getDisplayName() + ":\t" + counter.getValue());
+    if (counters != null) {
+      for (String groupName : counters.getGroupNames()) {
+        CounterGroup group = counters.getGroup(groupName);
+        log.info("Group: " + group.getDisplayName());
+        for (Counter counter : group) {
+          log.info(counter.getDisplayName() + ":\t" + counter.getValue());
+        }
       }
     }
-
     stopTiming("hadoop");
     startTiming("commit");
 
