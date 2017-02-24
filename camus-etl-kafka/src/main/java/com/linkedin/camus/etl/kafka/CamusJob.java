@@ -577,7 +577,7 @@ public class CamusJob extends Configured implements Tool {
       InputStream fStream;
       if (pathname.startsWith("hdfs:")) {
         Path pt = new Path(pathname);
-        FileSystem fs = FileSystem.get(new Configuration());
+        FileSystem fs = FileSystem.get(getConf() != null ? getConf() : new Configuration());
         fStream = fs.open(pt);
       } else {
         File file = new File(pathname);

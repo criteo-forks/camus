@@ -194,7 +194,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         key.set(request.getTopic(), request.getLeaderId(), request.getPartition(), request.getOffset(),
             request.getOffset(), 0);
         //Set lag on partitions with request
-        mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).increment(request.getLastOffset() - request.getOffset());
+//        mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).increment(request.getLastOffset() - request.getOffset());
         mapperContext.getCounter("offsetlag_per_brokerid", key.getLeaderId()).increment(request.getLastOffset() - request.getOffset());
         mapperContext.write(key, new ExceptionWritable("Topic not fully pulled, max task time reached"));
       }
