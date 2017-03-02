@@ -5,7 +5,7 @@
   <parent>
     <groupId>com.linkedin.camus</groupId>
     <artifactId>camus-parent</artifactId>
-    <version>1.0-criteo27</version>
+    <version>1.0-criteo28</version>
   </parent>
 
   <artifactId>camus-schema-registry-avro</artifactId>
