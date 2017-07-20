@@ -646,6 +646,6 @@ public class CamusJob extends Configured implements Tool {
   }
 
   public static String getReporterClass(JobContext job) {
-    return job.getConfiguration().get(CAMUS_REPORTER_CLASS, "com.linkedin.camus.etl.kafka.reporter.TimeReporter");
+    return job.getConfiguration().get(CAMUS_REPORTER_CLASS, TimeReporter.class.getName());
   }
 }
