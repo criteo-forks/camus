@@ -2,6 +2,10 @@ package com.linkedin.camus.etl.kafka.reporter;
 
 import java.util.Map;
 import java.io.IOException;
+
+import org.apache.hadoop.mapred.TaskReport;
+import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.hadoop.mapreduce.Counters;
 import org.apache.log4j.Logger;
 
 import org.apache.hadoop.mapreduce.Job;
@@ -14,5 +18,5 @@ public abstract class BaseReporter {
     this.log = org.apache.log4j.Logger.getLogger(BaseReporter.class);
   }
 
-  public abstract void report(Job job, Map<String, Long> timingMap) throws IOException;
+  public abstract void report(TaskReport[] tasks, Counters counters, Job job, Map<String, Long> timingMap) throws IOException;
 }

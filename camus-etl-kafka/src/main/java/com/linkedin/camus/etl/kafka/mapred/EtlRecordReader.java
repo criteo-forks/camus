@@ -254,6 +254,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
           try {
             wrapper = getWrappedRecord(key.getTopic(), bytes);
           } catch (Exception e) {
+            context.getCounter("total", "decoded-failed").increment(1L);
             if (exceptionCount < getMaximumDecoderExceptionsToPrint(context)) {
               mapperContext.write(key, new ExceptionWritable(e));
               exceptionCount++;

@@ -375,6 +375,10 @@ public class CamusJob extends Configured implements Tool {
       log.error(entry.getValue().toString());
     }
 
+    // fetch TaskReport before they disappear
+    JobClient client = new JobClient(new JobConf(job.getConfiguration()));
+    TaskReport[] mapTasks = client.getMapTaskReports(JobID.downgrade(job.getJobID()));
+
     if(job.isSuccessful()) {
       // Only commit offset if the post job task is successful.
       if (postJobTask(job)) {
@@ -391,17 +395,17 @@ public class CamusJob extends Configured implements Tool {
     log.info("Job finished");
     stopTiming("commit");
     stopTiming("total");
-    createReport(job, timingMap);
+    createReport(mapTasks, counters, job, timingMap);
 
     if (!job.isSuccessful()) {
-      JobClient client = new JobClient(new JobConf(job.getConfiguration()));
-
       TaskCompletionEvent[] tasks = job.getTaskCompletionEvents(0);
 
-      for (TaskReport task : client.getMapTaskReports(tasks[0].getTaskAttemptId().getJobID())) {
-        if (task.getCurrentStatus().equals(TIPStatus.FAILED)) {
-          for (String s : task.getDiagnostics()) {
-            System.err.println("task error: " + s);
+      if (tasks.length > 0) {
+        for (TaskReport task : client.getMapTaskReports(tasks[0].getTaskAttemptId().getJobID())) {
+          if (task.getCurrentStatus().equals(TIPStatus.FAILED)) {
+            for (String s : task.getDiagnostics()) {
+              System.err.println("task error: " + s);
+            }
           }
         }
       }
@@ -522,9 +526,9 @@ public class CamusJob extends Configured implements Tool {
    * @param timingMap
    * @throws IOException
    */
-  private void createReport(Job job, Map<String, Long> timingMap) throws IOException, ClassNotFoundException {
+  private void createReport(TaskReport[] tasks, Counters counters, Job job, Map<String, Long> timingMap) throws IOException, ClassNotFoundException {
     Class cls = job.getConfiguration().getClassByName(getReporterClass(job));
-    ((BaseReporter) ReflectionUtils.newInstance(cls, job.getConfiguration())).report(job, timingMap);
+    ((BaseReporter) ReflectionUtils.newInstance(cls, job.getConfiguration())).report(tasks, counters, job, timingMap);
   }
 
   /**

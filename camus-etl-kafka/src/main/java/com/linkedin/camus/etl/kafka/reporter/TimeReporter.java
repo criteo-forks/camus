@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.TreeMap;
 
 import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -18,7 +19,8 @@ import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
 
 
 public class TimeReporter extends BaseReporter {
-  public void report(Job job, Map<String, Long> timingMap) throws IOException {
+  public void report(TaskReport[] tasks, Counters counters, Job job, Map<String, Long> timingMap) throws IOException {
+    CounterGroup totalGrp = counters.getGroup("total");
     StringBuilder sb = new StringBuilder();
 
     sb.append("***********Timing Report*************\n");
@@ -44,10 +46,6 @@ public class TimeReporter extends BaseReporter {
     int seconds = (int) total % 60;
 
     sb.append(String.format("Total: %d minutes %d seconds\n", minutes, seconds));
-
-    JobClient client = new JobClient(new JobConf(job.getConfiguration()));
-
-    TaskReport[] tasks = client.getMapTaskReports(JobID.downgrade(job.getJobID()));
 
     double min = Long.MAX_VALUE, max = 0, mean = 0;
     double minRun = Long.MAX_VALUE, maxRun = 0, meanRun = 0;
@@ -93,8 +91,6 @@ public class TimeReporter extends BaseReporter {
     sb.append(String.format("    %12s %6.1f\n", "min", min));
     sb.append(String.format("    %12s %6.1f\n", "mean", mean));
     sb.append(String.format("    %12s %6.1f\n", "max", max));
-
-    CounterGroup totalGrp = job.getCounters().getGroup("total");
 
     long decode = totalGrp.findCounter("decode-time(ms)").getValue();
     long request = totalGrp.findCounter("request-time(ms)").getValue();

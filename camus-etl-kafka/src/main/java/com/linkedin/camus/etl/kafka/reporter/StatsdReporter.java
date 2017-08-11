@@ -4,6 +4,8 @@ import com.timgroup.statsd.StatsDClient;
 import com.timgroup.statsd.NonBlockingStatsDClient;
 import java.util.Map;
 import java.io.IOException;
+
+import org.apache.hadoop.mapred.TaskReport;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
@@ -22,13 +24,12 @@ public class StatsdReporter extends TimeReporter {
   private static boolean statsdEnabled;
   private static StatsDClient statsd;
 
-  public void report(Job job, Map<String, Long> timingMap) throws IOException {
-    super.report(job, timingMap);
-    submitCountersToStatsd(job);
+  public void report(TaskReport[] tasks, Counters counters, Job job, Map<String, Long> timingMap) throws IOException {
+    super.report(tasks, counters, job, timingMap);
+    submitCountersToStatsd(counters, job);
   }
 
-  private void submitCountersToStatsd(Job job) throws IOException {
-    Counters counters = job.getCounters();
+  private void submitCountersToStatsd(Counters counters, Job job) throws IOException {
     if (getStatsdEnabled(job)) {
       StatsDClient statsd =
           new NonBlockingStatsDClient("Camus", getStatsdHost(job), getStatsdPort(job),
