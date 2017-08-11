@@ -8,6 +8,8 @@ import com.linkedin.camus.etl.kafka.common.Source;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMapper;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
+import com.linkedin.camus.etl.kafka.mapred.MapredUtil;
+import com.linkedin.camus.etl.kafka.mapred.MapredUtil.EffectiveSeqFileReader;
 import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
 import com.linkedin.camus.etl.kafka.reporter.TimeReporter;
 
@@ -433,24 +435,32 @@ public class CamusJob extends Configured implements Tool {
   }
 
   public Map<EtlKey, ExceptionWritable> readErrors(FileSystem fs, Path newExecutionOutput) throws IOException {
-    Map<EtlKey, ExceptionWritable> errors = new HashMap<EtlKey, ExceptionWritable>();
-
-    for (FileStatus f : fs.listStatus(newExecutionOutput, new PrefixFilter(EtlMultiOutputFormat.ERRORS_PREFIX))) {
-      SequenceFile.Reader reader = new SequenceFile.Reader(fs, f.getPath(), fs.getConf());
-
-      String errorFrom = "\nError from file [" + f.getPath() + "]";
-
-      EtlKey key = new EtlKey();
-      ExceptionWritable value = new ExceptionWritable();
-
-      while (reader.next(key, value)) {
-        ExceptionWritable exceptionWritable = new ExceptionWritable(value.toString() + errorFrom);
-        errors.put(new EtlKey(key), exceptionWritable);
+    EffectiveSeqFileReader<EtlKey, ExceptionWritable> reader = new EffectiveSeqFileReader<EtlKey, ExceptionWritable>(fs.getConf(), newExecutionOutput, new PrefixFilter(EtlMultiOutputFormat.ERRORS_PREFIX)) {
+      @Override
+      public EtlKey createKey() {
+        return new EtlKey();
       }
-      reader.close();
-    }
-
-    return errors;
+      @Override
+      public ExceptionWritable createValue() {
+        return new ExceptionWritable();
+      }
+      @Override
+      public EtlKey copyKey(EtlKey key) {
+        return new EtlKey(key);
+      }
+      @Override
+      public ExceptionWritable copyValue(ExceptionWritable value) {
+        ExceptionWritable e = new ExceptionWritable();
+        e.set(value);
+        return e;
+      }
+      @Override
+      public ExceptionWritable copyValue(ExceptionWritable value, Path path) {
+        String errorFrom = "\nError from file [" + path + "]";
+        return new ExceptionWritable(value.toString() + errorFrom);
+      }
+    };
+    return reader.read();
   }
 
   // Posts the tracking counts to Kafka

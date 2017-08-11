@@ -3,6 +3,7 @@ package com.linkedin.camus.etl.kafka.mapred;
 import com.linkedin.camus.coders.CamusWrapper;
 import com.linkedin.camus.coders.MessageDecoder;
 import com.linkedin.camus.etl.kafka.CamusJob;
+import com.linkedin.camus.etl.kafka.mapred.MapredUtil.EffectiveSeqFileReader;
 import io.confluent.camus.etl.kafka.coders.AvroMessageDecoder;
 import com.linkedin.camus.etl.kafka.coders.MessageDecoderFactory;
 import com.linkedin.camus.etl.kafka.common.EtlKey;
@@ -43,6 +44,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 import kafka.api.PartitionOffsetRequestInfo;
@@ -506,29 +515,45 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     writer.close();
   }
 
-  public Map<CamusRequest, EtlKey> getPreviousOffsets(Path[] inputs, JobContext context) throws IOException {
-    Map<CamusRequest, EtlKey> offsetKeysMap = new HashMap<CamusRequest, EtlKey>();
+  /**
+   * Fetch previous offsets in parallel with an executor service of at most 10 executors
+   */
+  public Map<CamusRequest, EtlKey> getPreviousOffsets(Path[] inputs, final JobContext context) throws IOException {
+    Map<CamusRequest, EtlKey> offsetKeysMap = new HashMap<>();
     for (Path input : inputs) {
-      FileSystem fs = input.getFileSystem(context.getConfiguration());
-      for (FileStatus f : fs.listStatus(input, new OffsetFileFilter())) {
-        log.info("previous offset file:" + f.getPath().toString());
-        SequenceFile.Reader reader = new SequenceFile.Reader(fs, f.getPath(), context.getConfiguration());
-        EtlKey key = new EtlKey();
-        while (reader.next(key, NullWritable.get())) {
-          //TODO: factor out kafka specific request functionality
-          CamusRequest request = new EtlRequest(context, key.getTopic(), key.getLeaderId(), key.getPartition());
-          if (offsetKeysMap.containsKey(request)) {
+      EffectiveSeqFileReader<EtlKey, NullWritable> reader = new EffectiveSeqFileReader<EtlKey, NullWritable>(
+              context.getConfiguration(), input, new OffsetFileFilter()
+      ) {
+        @Override
+        public EtlKey createKey() {
+          return new EtlKey();
+        }
+        @Override
+        public NullWritable createValue() {
+          return NullWritable.get();
+        }
+        @Override
+        public EtlKey copyKey(EtlKey key) {
+          return new EtlKey(key);
+        }
+        @Override
+        public NullWritable copyValue(NullWritable value) {
+          return NullWritable.get();
+        }
+      };
+      Set<EtlKey> previousOffsets = reader.read().keySet();
 
-            EtlKey oldKey = offsetKeysMap.get(request);
-            if (oldKey.getOffset() < key.getOffset()) {
-              offsetKeysMap.put(request, key);
-            }
-          } else {
+      for (EtlKey key : previousOffsets) {
+        CamusRequest request = new EtlRequest(context, key.getTopic(), key.getLeaderId(), key.getPartition());
+        if (offsetKeysMap.containsKey(request)) {
+
+          EtlKey oldKey = offsetKeysMap.get(request);
+          if (oldKey.getOffset() < key.getOffset()) {
             offsetKeysMap.put(request, key);
           }
-          key = new EtlKey();
+        } else {
+          offsetKeysMap.put(request, key);
         }
-        reader.close();
       }
     }
     return offsetKeysMap;
