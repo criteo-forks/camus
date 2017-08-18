@@ -283,7 +283,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
           if (endTimeStamp == 0) {
             DateTime time = new DateTime(curTimeStamp);
-            statusMsg += " begin read at " + time.toString();
+            statusMsg = "begin read at " + time.toString() + " " + statusMsg;
             context.setStatus(statusMsg);
             log.info(key.getTopic() + " begin read at " + time.toString());
             endTimeStamp = (time.plusHours(this.maxPullHours)).getMillis();
@@ -292,7 +292,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
             log.info("Kafka Max history hours reached");
             mapperContext.write(key, new ExceptionWritable("Topic not fully pulled, max partition hours reached"
                 + maxMsg));
-            statusMsg += " max read " + maxMsg;
+            statusMsg = "max read " + maxMsg + " " + statusMsg;
             context.setStatus(statusMsg);
             log.info(key.getTopic() + " max read " + maxMsg);
             //Here lag have to be decreased on  "count" messages for key
