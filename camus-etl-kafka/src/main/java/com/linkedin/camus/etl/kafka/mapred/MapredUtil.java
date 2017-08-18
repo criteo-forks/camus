@@ -77,20 +77,42 @@ public class MapredUtil {
 
         /**
          * Helper method to read full content of only one SequenceFile
+         * Retry 10 times before failing
          */
         private Map<K, V> readOneFile(Path path) throws IOException {
-            Map<K, V> res = new HashMap<>();
-            Reader reader = new Reader(conf, Reader.file(path));
-            try {
-                K key = createKey();
-                V value = createValue();
-                while (reader.next(key, value)) {
-                    res.put(copyKey(key, path), copyValue(value, path));
+            int retries = 10;
+            int currentWait = 1000;
+            while (retries > 0) {
+                try {
+                    Map<K, V> res = new HashMap<>();
+                    Reader reader = new Reader(conf, Reader.file(path));
+                    try {
+                        K key = createKey();
+                        V value = createValue();
+                        while (reader.next(key, value)) {
+                            res.put(copyKey(key, path), copyValue(value, path));
+                        }
+                        return res;
+                    } finally {
+                        reader.close();
+                    }
+                } catch (IOException e) {
+                    LOG.error("got exception while reading " + path + " : " + e.getMessage());
+                    retries--;
+                    if (retries == 0) {
+                        throw e;
+                    } else {
+                        try {
+                            Thread.sleep(currentWait);
+                        } catch (InterruptedException e1) {
+                            LOG.error("thread interrupted while exponential backoff", e1);
+                        }
+                        currentWait = java.lang.Math.min(currentWait * 2, 60000);
+                    }
                 }
-                return res;
-            } finally {
-                reader.close();
             }
+            // either we return the result or throw the exception after max retries.
+            throw new RuntimeException("this should not happen");
         }
 
         /**
