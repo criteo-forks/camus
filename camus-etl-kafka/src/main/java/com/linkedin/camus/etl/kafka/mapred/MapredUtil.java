@@ -153,7 +153,7 @@ public class MapredUtil {
 
                 // await all tasks completion
                 for (Future<Void> future : futures) {
-                    future.get(2, TimeUnit.SECONDS);
+                    future.get(120, TimeUnit.SECONDS);
                 }
 
                 return res;

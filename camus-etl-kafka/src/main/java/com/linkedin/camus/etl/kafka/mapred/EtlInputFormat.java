@@ -251,8 +251,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     for (TopicMetadata topicMetadata : topicMetadataList) {
       if (Pattern.matches(regex, topicMetadata.topic())) {
         filteredTopics.add(topicMetadata);
-      } else {
-        log.info("Discarding topic : " + topicMetadata.topic());
+        log.info("Added topic : " + topicMetadata.topic());
       }
     }
     return filteredTopics;

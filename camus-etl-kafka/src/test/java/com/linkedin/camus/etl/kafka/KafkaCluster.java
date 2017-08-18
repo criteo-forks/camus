@@ -14,7 +14,7 @@ import java.util.Random;
 import kafka.metrics.KafkaMetricsReporter;
 import kafka.server.KafkaConfig;
 import kafka.server.KafkaServer;
-import kafka.utils.Time;
+import org.apache.kafka.common.utils.Time;
 import kafka.utils.CoreUtils;
 import scala.Option;
 
@@ -93,28 +93,10 @@ public class KafkaCluster {
 
   private static KafkaServer startBroker(Properties props) {
     Option<String> noThreadNamePrefix = Option.empty();
-    KafkaServer server = new KafkaServer(KafkaConfig.fromProps(props), new SystemTime(), noThreadNamePrefix);
+    KafkaServer server = new KafkaServer(KafkaConfig.fromProps(props), Time.SYSTEM, noThreadNamePrefix,
+            scala.collection.JavaConversions.asScalaBuffer(Collections.<KafkaMetricsReporter>emptyList()));
     server.startup();
     return server;
-  }
-
-  public static class SystemTime implements Time {
-
-    public long milliseconds() {
-      return System.currentTimeMillis();
-    }
-
-    public long nanoseconds() {
-      return System.nanoTime();
-    }
-
-    public void sleep(long ms) {
-      try {
-        Thread.sleep(ms);
-      } catch (InterruptedException e) {
-        // Ignore
-      }
-    }
   }
 
   private static class EmbeddedZookeeper {
