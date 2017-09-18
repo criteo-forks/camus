@@ -5,14 +5,11 @@ import com.timgroup.statsd.NonBlockingStatsDClient;
 import java.util.Map;
 import java.io.IOException;
 
-import org.apache.hadoop.mapred.TaskReport;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.hadoop.util.ToolRunner;
-
-import com.linkedin.camus.etl.kafka.reporter.TimeReporter;
+import org.apache.hadoop.mapreduce.TaskReport;
 
 
 public class StatsdReporter extends TimeReporter {

@@ -10,12 +10,7 @@ import java.util.TreeMap;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobID;
-import org.apache.hadoop.mapred.TaskReport;
-
-import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
+import org.apache.hadoop.mapreduce.TaskReport;
 
 
 public class TimeReporter extends BaseReporter {

@@ -8,7 +8,6 @@ import com.linkedin.camus.etl.kafka.common.Source;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMapper;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
-import com.linkedin.camus.etl.kafka.mapred.MapredUtil;
 import com.linkedin.camus.etl.kafka.mapred.MapredUtil.EffectiveSeqFileReader;
 import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
 import com.linkedin.camus.etl.kafka.reporter.TimeReporter;
@@ -20,19 +19,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.ClassNotFoundException;
-import java.net.URI;
 import java.net.URISyntaxException;
-import java.text.NumberFormat;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Set;
-import java.util.TreeMap;
 import java.util.Comparator;
 import java.util.Arrays;
 import java.util.regex.Pattern;
@@ -52,20 +45,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.io.SequenceFile;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.TIPStatus;
-import org.apache.hadoop.mapred.TaskCompletionEvent;
-import org.apache.hadoop.mapred.TaskReport;
-import org.apache.hadoop.mapreduce.Counter;
-import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.hadoop.mapreduce.Counters;
-import org.apache.hadoop.mapreduce.InputFormat;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.JobContext;
-import org.apache.hadoop.mapreduce.OutputFormat;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -349,6 +330,8 @@ public class CamusJob extends Configured implements Tool {
     job.submit();
     job.waitForCompletion(true);
 
+    // fetch TaskReport before they disappear
+    TaskReport[] mapTasks = job.getTaskReports(TaskType.MAP);
     // dump all counters
     Counters counters = job.getCounters();
     if (counters != null) {
@@ -377,10 +360,6 @@ public class CamusJob extends Configured implements Tool {
       log.error(entry.getValue().toString());
     }
 
-    // fetch TaskReport before they disappear
-    JobClient client = new JobClient(new JobConf(job.getConfiguration()));
-    TaskReport[] mapTasks = client.getMapTaskReports(JobID.downgrade(job.getJobID()));
-
     if(job.isSuccessful()) {
       // Only commit offset if the post job task is successful.
       if (postJobTask(job)) {
@@ -400,10 +379,8 @@ public class CamusJob extends Configured implements Tool {
     createReport(mapTasks, counters, job, timingMap);
 
     if (!job.isSuccessful()) {
-      TaskCompletionEvent[] tasks = job.getTaskCompletionEvents(0);
-
-      if (tasks.length > 0) {
-        for (TaskReport task : client.getMapTaskReports(tasks[0].getTaskAttemptId().getJobID())) {
+      if (mapTasks.length > 0) {
+        for (TaskReport task : mapTasks) {
           if (task.getCurrentStatus().equals(TIPStatus.FAILED)) {
             for (String s : task.getDiagnostics()) {
               System.err.println("task error: " + s);
@@ -531,14 +508,13 @@ public class CamusJob extends Configured implements Tool {
    * Creates a diagnostic report based on provided logger
    * defaults to TimeLogger which focusses on timing breakdowns. Useful
    * for determining where to optimize.
-   * 
-   * @param job
+   *
    * @param timingMap
    * @throws IOException
    */
   private void createReport(TaskReport[] tasks, Counters counters, Job job, Map<String, Long> timingMap) throws IOException, ClassNotFoundException {
-    Class cls = job.getConfiguration().getClassByName(getReporterClass(job));
-    ((BaseReporter) ReflectionUtils.newInstance(cls, job.getConfiguration())).report(tasks, counters, job, timingMap);
+    Class cls = getConf().getClassByName(getReporterClass(getConf()));
+    ((BaseReporter) ReflectionUtils.newInstance(cls, getConf())).report(tasks, counters, job, timingMap);
   }
 
   /**
@@ -659,7 +635,7 @@ public class CamusJob extends Configured implements Tool {
     return job.getConfiguration().getBoolean(LOG4J_CONFIGURATION, false);
   }
 
-  public static String getReporterClass(JobContext job) {
-    return job.getConfiguration().get(CAMUS_REPORTER_CLASS, TimeReporter.class.getName());
+  public static String getReporterClass(Configuration configuration) {
+    return configuration.get(CAMUS_REPORTER_CLASS, TimeReporter.class.getName());
   }
 }

@@ -3,12 +3,9 @@ package com.linkedin.camus.etl.kafka.reporter;
 import java.util.Map;
 import java.io.IOException;
 
-import org.apache.hadoop.mapred.TaskReport;
-import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Counters;
-import org.apache.log4j.Logger;
-
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.TaskReport;
 
 
 public abstract class BaseReporter {
