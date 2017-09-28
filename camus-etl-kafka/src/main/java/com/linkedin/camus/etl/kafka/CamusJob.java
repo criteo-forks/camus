@@ -107,6 +107,10 @@ public class CamusJob extends Configured implements Tool {
     this.log = log;
   }
 
+  protected Properties getProps() {
+    return props;
+  }
+
   private static HashMap<String, Long> timingMap = new HashMap<String, Long>();
 
   public static void startTiming(String name) {
