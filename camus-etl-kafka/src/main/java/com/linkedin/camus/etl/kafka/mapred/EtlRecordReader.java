@@ -325,6 +325,11 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         log.info("Records read : " + count);
         count = 0;
         reader = null;
+      } catch (KafkaReader.MalformedMessageException mme){
+        // Hack to fix the problem when we run into an empty message.
+        mapperContext.write(key, new ExceptionWritable(mme));
+        // Without reset reader, will continue to read messages out of it.
+        continue;
       } catch (Throwable t) {
         Exception e = new Exception(t.getLocalizedMessage(), t);
         e.setStackTrace(t.getStackTrace());

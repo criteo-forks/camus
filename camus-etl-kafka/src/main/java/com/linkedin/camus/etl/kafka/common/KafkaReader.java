@@ -106,14 +106,24 @@ public class KafkaReader {
    * @return true if there exists more events
    * @throws IOException
    */
-  public boolean getNext(EtlKey key, BytesWritable payload, BytesWritable pKey, AtomicReference<Message> messageRef) throws IOException {
+  public boolean getNext(EtlKey key, BytesWritable payload, BytesWritable pKey, AtomicReference<Message> messageRef) throws IOException, MalformedMessageException {
     if (hasNext()) {
 
       MessageAndOffset msgAndOffset = messageIter.next();
       Message message = msgAndOffset.message();
       messageRef.set(message);
 
-      ByteBuffer buf = message.payload();
+      ByteBuffer buf;
+      try {
+        buf = message.payload();
+      } catch (IndexOutOfBoundsException e) {
+        StringBuilder errorMsg = new StringBuilder("Malformed message: ");
+        ByteBuffer raw = message.buffer();
+        for (int i = 0; i < raw.limit(); i++) {
+          errorMsg.append((int)raw.get()).append(",");
+        }
+        throw new MalformedMessageException(errorMsg.toString(), e);
+      }
       int origSize = buf.remaining();
       byte[] bytes = new byte[origSize];
       buf.get(bytes, buf.position(), origSize);
@@ -313,5 +323,15 @@ public class KafkaReader {
    */
   public long getTotalFetchTime() {
     return totalFetchTime;
+  }
+
+  public static class MalformedMessageException extends Exception {
+    public MalformedMessageException(Throwable cause) {
+      super(cause);
+    }
+
+    public MalformedMessageException(String error, Throwable cause) {
+      super(error, cause);
+    }
   }
 }
