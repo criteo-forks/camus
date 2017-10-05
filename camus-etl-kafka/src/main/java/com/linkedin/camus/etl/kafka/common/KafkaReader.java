@@ -116,7 +116,7 @@ public class KafkaReader {
       ByteBuffer buf;
       try {
         buf = message.payload();
-      } catch (IndexOutOfBoundsException e) {
+      } catch (Exception e) {
         StringBuilder errorMsg = new StringBuilder("Malformed message: ");
         ByteBuffer raw = message.buffer();
         for (int i = 0; i < raw.limit(); i++) {
