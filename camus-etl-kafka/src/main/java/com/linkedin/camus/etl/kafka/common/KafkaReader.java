@@ -1,18 +1,11 @@
 package com.linkedin.camus.etl.kafka.common;
 
-import java.io.IOException;
-import java.net.URI;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-
+import com.linkedin.camus.etl.kafka.CamusJob;
+import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import kafka.api.OffsetRequest;
 import kafka.api.PartitionFetchInfo;
 import kafka.api.PartitionOffsetRequestInfo;
 import kafka.common.ErrorMapping;
-import kafka.common.OffsetMetadataAndError$;
 import kafka.common.TopicAndPartition;
 import kafka.javaapi.FetchRequest;
 import kafka.javaapi.FetchResponse;
@@ -21,13 +14,17 @@ import kafka.javaapi.consumer.SimpleConsumer;
 import kafka.javaapi.message.ByteBufferMessageSet;
 import kafka.message.Message;
 import kafka.message.MessageAndOffset;
-
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.log4j.Logger;
 
-import com.linkedin.camus.etl.kafka.CamusJob;
-import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 /**
@@ -108,48 +105,56 @@ public class KafkaReader {
    */
   public boolean getNext(EtlKey key, BytesWritable payload, BytesWritable pKey, AtomicReference<Message> messageRef) throws IOException, MalformedMessageException {
     if (hasNext()) {
-
       MessageAndOffset msgAndOffset = messageIter.next();
       Message message = msgAndOffset.message();
       messageRef.set(message);
 
       ByteBuffer buf;
       try {
-        buf = message.payload();
-      } catch (Exception e) {
-        StringBuilder errorMsg = new StringBuilder("Malformed message: ");
-        ByteBuffer raw = message.buffer();
-        for (int i = 0; i < raw.limit(); i++) {
-          errorMsg.append((int)raw.get()).append(",");
+        try {
+          buf = message.payload();
+        } catch (Exception e) {
+          String errorMsg = dumpCorruptMessage(message);
+          throw new MalformedMessageException(errorMsg, e);
         }
-        throw new MalformedMessageException(errorMsg.toString(), e);
-      }
-      int origSize = buf.remaining();
-      byte[] bytes = new byte[origSize];
-      buf.get(bytes, buf.position(), origSize);
-      payload.set(bytes, 0, origSize);
-
-      buf = message.key();
-      if (buf != null) {
-        origSize = buf.remaining();
-        bytes = new byte[origSize];
+        if (buf == null) {
+          log.warn("Got a null payload on offset " + msgAndOffset.offset());
+          throw new MalformedMessageException("Null payload message: " + dumpCorruptMessage(message));
+        }
+        int origSize = buf.remaining();
+        byte[] bytes = new byte[origSize];
         buf.get(bytes, buf.position(), origSize);
-        pKey.set(bytes, 0, origSize);
+        payload.set(bytes, 0, origSize);
+        buf = message.key();
+        if (buf != null) {
+          origSize = buf.remaining();
+          bytes = new byte[origSize];
+          buf.get(bytes, buf.position(), origSize);
+          pKey.set(bytes, 0, origSize);
+        }
+        return true;
+      } finally {
+        key.clear();
+        key.set(kafkaRequest.getTopic(), kafkaRequest.getLeaderId(), kafkaRequest.getPartition(), currentOffset,
+                msgAndOffset.offset() + 1, message.checksum());
+
+        key.setMessageSize(message.size());
+
+        currentOffset = msgAndOffset.offset() + 1; // increase offset
+        currentCount++; // increase count
       }
-
-      key.clear();
-      key.set(kafkaRequest.getTopic(), kafkaRequest.getLeaderId(), kafkaRequest.getPartition(), currentOffset,
-          msgAndOffset.offset() + 1, message.checksum());
-
-      key.setMessageSize(msgAndOffset.message().size());
-
-      currentOffset = msgAndOffset.offset() + 1; // increase offset
-      currentCount++; // increase count
-
-      return true;
     } else {
       return false;
     }
+  }
+
+  private String dumpCorruptMessage(Message message) {
+    StringBuilder errorMsg = new StringBuilder("Malformed message: ");
+    ByteBuffer raw = message.buffer();
+    for (int i = 0; i < raw.limit(); i++) {
+      errorMsg.append((int)raw.get()).append(",");
+    }
+    return errorMsg.toString();
   }
 
   /**
@@ -330,8 +335,13 @@ public class KafkaReader {
       super(cause);
     }
 
+    public MalformedMessageException(String error) {
+      super(error);
+    }
+
     public MalformedMessageException(String error, Throwable cause) {
       super(error, cause);
     }
+
   }
 }

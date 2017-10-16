@@ -8,7 +8,7 @@
 	<parent>
 		<groupId>com.linkedin.camus</groupId>
 		<artifactId>camus-parent</artifactId>
-		<version>1.0-criteo37</version>
+		<version>1.0-criteo38</version>
 	</parent>
 
 	<dependencies>
