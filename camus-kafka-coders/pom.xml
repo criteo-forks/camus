@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>com.linkedin.camus</groupId>
 		<artifactId>camus-parent</artifactId>
-		<version>1.0-criteo40</version>
+		<version>1.0-criteo41</version>
 	</parent>
 
 	<artifactId>camus-kafka-coders</artifactId>
@@ -29,8 +29,8 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.kafka</groupId>
-			<artifactId>kafka_2.10</artifactId>
-			<version>0.10.2.1</version>
+			<artifactId>kafka_2.11</artifactId>
+			<version>${kafka.version}</version>
 		</dependency>
 		<!-- Gson is needed for JSONStringMessageDecoder -->
 		<dependency>
