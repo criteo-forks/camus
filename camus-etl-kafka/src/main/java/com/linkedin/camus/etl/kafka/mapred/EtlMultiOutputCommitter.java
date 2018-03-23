@@ -141,6 +141,11 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
       log.info("Not moving run data.");
     }
 
+    commitOffsets(context);
+    commitOther(context);
+  }
+
+  protected void commitOffsets(TaskAttemptContext context) throws IOException {
     SequenceFile.Writer offsetWriter =
         SequenceFile.createWriter(context.getConfiguration(),
             SequenceFile.Writer.file(new Path(super.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
@@ -152,6 +157,9 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
       offsetWriter.append(offsets.get(s), NullWritable.get());
     }
     offsetWriter.close();
+  }
+
+  protected void commitOther(TaskAttemptContext context) throws IOException {
     super.commitTask(context);
   }
 
