@@ -33,11 +33,13 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
       new HashMap<String, RecordWriter<IEtlKey, CamusWrapper>>();
 
   private EtlMultiOutputCommitter committer;
+  private RecordWriterProvider recordWriterProvider;
 
   public EtlMultiOutputRecordWriter(TaskAttemptContext context, EtlMultiOutputCommitter committer) throws IOException,
       InterruptedException {
     this.context = context;
     this.committer = committer;
+    recordWriterProvider = getRecordWriterProvider(context);
     errorWriter =
         SequenceFile.createWriter(context.getConfiguration(),
             SequenceFile.Writer.file(new Path(committer.getWorkPath(), EtlMultiOutputFormat.getUniqueFile(context,
@@ -111,14 +113,12 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     return dataWriters.get(workingFileName);
   }
 
-  private RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(TaskAttemptContext context, String fileName,
-      CamusWrapper value) throws IOException, InterruptedException {
-    RecordWriterProvider recordWriterProvider = null;
+  private RecordWriterProvider getRecordWriterProvider(TaskAttemptContext context) {
     try {
       //recordWriterProvider = EtlMultiOutputFormat.getRecordWriterProviderClass(context).newInstance();
       Class<RecordWriterProvider> rwp = EtlMultiOutputFormat.getRecordWriterProviderClass(context);
       Constructor<RecordWriterProvider> crwp = rwp.getConstructor(TaskAttemptContext.class);
-      recordWriterProvider = crwp.newInstance(context);
+      return crwp.newInstance(context);
     } catch (InstantiationException e) {
       throw new IllegalStateException(e);
     } catch (IllegalAccessException e) {
@@ -126,6 +126,10 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private RecordWriter<IEtlKey, CamusWrapper> getDataRecordWriter(TaskAttemptContext context, String fileName,
+      CamusWrapper value) throws IOException, InterruptedException {
     return recordWriterProvider.getDataRecordWriter(context, fileName, value, committer);
   }
 }
