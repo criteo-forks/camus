@@ -65,8 +65,6 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
     errorWriter.close();
   }
 
-
-
   @Override
   public void write(EtlKey key, Object val) throws IOException, InterruptedException {
     if (val instanceof CamusWrapper<?>) {
@@ -77,14 +75,6 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
         context.getCounter("total", "skip-old").increment(1);
         committer.addOffset(key);
       } else {
-        if (!key.getTopic().equals(currentTopic)) {
-          for (RecordWriter<IEtlKey, CamusWrapper> writer : dataWriters.values()) {
-            writer.close(context);
-          }
-          dataWriters.clear();
-          currentTopic = key.getTopic();
-        }
-
         CamusWrapper value = (CamusWrapper) val;
         RecordWriter<IEtlKey, CamusWrapper> dataWriter = getDataWriter(key, value);
         dataWriter.write(key, value);
@@ -104,6 +94,14 @@ public class EtlMultiOutputRecordWriter extends RecordWriter<EtlKey, Object> {
 
   private RecordWriter<IEtlKey, CamusWrapper> getDataWriter(EtlKey key, CamusWrapper value) throws IOException,
           InterruptedException {
+    // Close previous writers if topic is changed.
+    if (!key.getTopic().equals(currentTopic)) {
+      for (RecordWriter<IEtlKey, CamusWrapper> writer : dataWriters.values()) {
+        writer.close(context);
+      }
+      dataWriters.clear();
+      currentTopic = key.getTopic();
+    }
     String workingFileName = EtlMultiOutputFormat.getWorkingFileName(context, key);
     committer.addCounts(key, workingFileName);
     if (!dataWriters.containsKey(workingFileName)) {
