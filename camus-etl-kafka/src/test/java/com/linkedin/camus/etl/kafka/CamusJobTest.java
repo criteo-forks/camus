@@ -1,9 +1,5 @@
 package com.linkedin.camus.etl.kafka;
 
-import static org.hamcrest.core.Is.is;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-
 import com.google.gson.Gson;
 import com.linkedin.camus.etl.kafka.coders.FailDecoder;
 import com.linkedin.camus.etl.kafka.coders.JsonStringMessageDecoder;
@@ -12,7 +8,6 @@ import com.linkedin.camus.etl.kafka.common.SequenceFileRecordWriterProvider;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 import com.linkedin.camus.workallocater.CamusRequest;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -25,29 +20,26 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.task.JobContextImpl;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.KafkaAdminClient;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.junit.*;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.stream.Collectors;
 
-import kafka.javaapi.producer.Producer;
-import kafka.producer.KeyedMessage;
-import kafka.producer.ProducerConfig;
-import kafka.serializer.StringEncoder;
+import static org.hamcrest.core.Is.is;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 
 public class CamusJobTest {
@@ -64,6 +56,7 @@ public class CamusJobTest {
   private static final String TOPIC_3 = "topic_3";
 
   private static KafkaCluster cluster;
+  private static String brokersUrl;
   private static FileSystem fs;
   private static Gson gson;
   private static Map<String, List<Message>> messagesWritten;
@@ -72,11 +65,15 @@ public class CamusJobTest {
   @BeforeClass
   public static void beforeClass() throws IOException {
     cluster = new KafkaCluster();
+    brokersUrl = cluster.getBrokers().stream()
+            .map(broker -> broker.adminManager().config().hostName() + ":" + broker.adminManager().config().port())
+            .collect(Collectors.joining(","));
+
     fs = FileSystem.get(new Configuration());
     gson = new Gson();
 
     // You can't delete messages in Kafka so just writing a set of known messages that can be used for testing
-    messagesWritten = new HashMap<String, List<Message>>();
+    messagesWritten = new HashMap<>();
     messagesWritten.put(TOPIC_1, writeKafka(TOPIC_1, NUMBER_OF_MESSAGE_TO_INSERT));
     messagesWritten.put(TOPIC_2, writeKafka(TOPIC_2, NUMBER_OF_MESSAGE_TO_INSERT));
     messagesWritten.put(TOPIC_3, writeKafka(TOPIC_3, NUMBER_OF_MESSAGE_TO_INSERT));
@@ -125,34 +122,35 @@ public class CamusJobTest {
   }
 
   @After
-  public void after() throws IOException {
+  public void after() {
+    Properties props = new Properties();
+    props.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokersUrl);
+    props.setProperty(ConsumerConfig.EXCLUDE_INTERNAL_TOPICS_CONFIG, "false");
+    KafkaAdminClient adminClient = (KafkaAdminClient) AdminClient.create(props);
+    adminClient.deleteTopics(Collections.singletonList("__consumer_offsets"));
+
     // Delete all camus data
     folder.delete();
   }
 
   private Map<CamusRequest, EtlKey> fetchLatestOffset() throws Exception {
-      return fetchLatestOffset(job, props);
+    return fetchLatestOffset(job, props);
   }
 
   public static Map<CamusRequest, EtlKey> fetchLatestOffset(CamusJob job, Properties props) throws Exception {
-    // Read back lastest camus history offsets
+    // Read back latest camus history offsets
     EtlInputFormat inputFormat = new EtlInputFormat();
     Job hJob = job.createJob(props);
     FileSystem fs = FileSystem.get(hJob.getConfiguration());
     Path execHistory = new Path(job.getConf().get(CamusJob.ETL_EXECUTION_HISTORY_PATH));
     FileStatus[] executions = fs.listStatus(execHistory);
-    Arrays.sort(executions, new Comparator<FileStatus>() {
-      public int compare(FileStatus f1, FileStatus f2) {
-        return f1.getPath().getName().compareTo(f2.getPath().getName());
-      }
-    });
-    // Read only lastest execution history folder
+    Arrays.sort(executions, Comparator.comparing(f -> f.getPath().getName()));
+    // Read only latest execution history folder
     assertThat(executions.length > 0, is(true));
     Path previous = executions[executions.length - 1].getPath();
     FileInputFormat.setInputPaths(hJob, previous);
     JobContext context = new JobContextImpl(hJob.getConfiguration(), new JobID());
-    Map<CamusRequest, EtlKey> previousOffsets = inputFormat.getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
-    return previousOffsets;
+    return inputFormat.getPreviousOffsets(FileInputFormat.getInputPaths(context), context);
   }
 
   @Test
@@ -238,27 +236,21 @@ public class CamusJobTest {
   }
 
   private static List<Message> writeKafka(String topic, long numOfMessages) {
+    List<Message> messages = new ArrayList<>();
 
-    List<Message> messages = new ArrayList<Message>();
-    List<KeyedMessage<String, String>> kafkaMessages = new ArrayList<KeyedMessage<String, String>>();
+    Properties props = cluster.getProps();
+    props.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokersUrl);
+    props.setProperty("value.serializer", ByteArraySerializer.class.getName());
+    props.setProperty("key.serializer", ByteArraySerializer.class.getName());
 
-    for (long i = 0; i < numOfMessages; i++) {
-      Message msg = new Message(RANDOM.nextInt());
-      messages.add(msg);
-      kafkaMessages.add(new KeyedMessage<String, String>(topic, Long.toString(i), gson.toJson(msg)));
-    }
 
-    Properties producerProps = cluster.getProps();
-
-    producerProps.setProperty("serializer.class", StringEncoder.class.getName());
-    producerProps.setProperty("key.serializer.class", StringEncoder.class.getName());
-
-    Producer<String, String> producer = new Producer<String, String>(new ProducerConfig(producerProps));
-
-    try {
-      producer.send(kafkaMessages);
-    } finally {
-      producer.close();
+    try (KafkaProducer<byte[], byte[]> producer = new KafkaProducer<>(props)) {
+      for (long i = 0; i < numOfMessages; i++) {
+        Message msg = new Message(RANDOM.nextInt());
+        ProducerRecord<byte[], byte[]> producerRecord = new ProducerRecord<>(topic, null, gson.toJson(msg).getBytes(StandardCharsets.UTF_8));
+        messages.add(msg);
+        producer.send(producerRecord);
+      }
     }
 
     return messages;
@@ -269,23 +261,20 @@ public class CamusJobTest {
   }
 
   private List<Message> readMessages(Path path) throws IOException, InstantiationException, IllegalAccessException {
-    List<Message> messages = new ArrayList<Message>();
+    List<Message> messages = new ArrayList<>();
 
     try {
       for (FileStatus file : fs.listStatus(path)) {
-        if (file.isDir()) {
+        if (file.isDirectory()) {
           messages.addAll(readMessages(file.getPath()));
         } else {
-          SequenceFile.Reader reader = new SequenceFile.Reader(fs, file.getPath(), new Configuration());
-          try {
+          try (SequenceFile.Reader reader = new SequenceFile.Reader(fs, file.getPath(), new Configuration())) {
             LongWritable key = (LongWritable) reader.getKeyClass().newInstance();
             Text value = (Text) reader.getValueClass().newInstance();
 
             while (reader.next(key, value)) {
               messages.add(gson.fromJson(value.toString(), Message.class));
             }
-          } finally {
-            reader.close();
           }
         }
       }

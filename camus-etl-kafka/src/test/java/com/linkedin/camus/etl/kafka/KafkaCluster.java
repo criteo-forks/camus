@@ -42,7 +42,7 @@ public class KafkaCluster {
   public KafkaCluster(Properties baseProperties, int numOfBrokers) throws IOException {
 
     this.zookeeper = new EmbeddedZookeeper();
-    this.brokers = new ArrayList<KafkaServer>();
+    this.brokers = new ArrayList<>();
 
     this.props = new Properties();
 
@@ -69,6 +69,9 @@ public class KafkaCluster {
       properties.setProperty("port", Integer.toString(brokerPort));
       properties.setProperty("log.dir", getTempDir().getAbsolutePath());
       properties.setProperty("log.flush.interval.messages", String.valueOf(1));
+      properties.setProperty("offsets.topic.replication.factor", String.valueOf(1));
+      properties.setProperty("offsets.topic.num.partitions", String.valueOf(1));
+      properties.setProperty("default.replication.factor", String.valueOf(1));
 
       brokers.add(startBroker(properties));
     }
@@ -89,6 +92,10 @@ public class KafkaCluster {
       broker.shutdown();
     }
     zookeeper.shutdown();
+  }
+
+  public List<KafkaServer> getBrokers() {
+    return brokers;
   }
 
   private static KafkaServer startBroker(Properties props) {

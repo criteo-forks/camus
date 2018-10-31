@@ -3,7 +3,6 @@ package com.linkedin.camus.workallocater;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -131,18 +130,8 @@ public class TopicGroupingAllocator extends BaseAllocator {
     }
 
     @Override
-    public void setURI(URI uri) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
     public String getTopic() {
       return requests.get(0).getTopic();
-    }
-
-    @Override
-    public URI getURI() {
-      return requests.get(0).getURI();
     }
 
     @Override
@@ -171,11 +160,6 @@ public class TopicGroupingAllocator extends BaseAllocator {
     }
 
     @Override
-    public long getLastOffset(long time) {
-      return requests.get(0).getLastOffset(time);
-    }
-
-    @Override
     public long estimateDataSize() {
       if (size == -1) {
         for (CamusRequest cr : requests) {
@@ -183,11 +167,6 @@ public class TopicGroupingAllocator extends BaseAllocator {
         }
       }
       return size;
-    }
-
-    @Override
-    public long estimateDataSize(long endTime) {
-      throw new UnsupportedOperationException();
     }
 
     @Override

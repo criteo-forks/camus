@@ -622,13 +622,12 @@ public class CamusJob extends Configured implements Tool {
     return job.getConfiguration().get(KAFKA_CLIENT_NAME);
   }
 
-  public static String getKafkaFetchRequestBufferSize(JobContext job) {
-    return job.getConfiguration().get(KAFKA_FETCH_BUFFER_SIZE);
+  public static int getKafkaFetchRequestBufferSize(JobContext job) {
+    return job.getConfiguration().getInt(KAFKA_FETCH_BUFFER_SIZE, 65536);
   }
 
   public static int getKafkaTimeoutValue(JobContext job) {
-    int timeOut = job.getConfiguration().getInt(KAFKA_TIMEOUT_VALUE, 30000);
-    return timeOut;
+    return job.getConfiguration().getInt(KAFKA_TIMEOUT_VALUE, 30000);
   }
 
   public static int getKafkaBufferSize(JobContext job) {

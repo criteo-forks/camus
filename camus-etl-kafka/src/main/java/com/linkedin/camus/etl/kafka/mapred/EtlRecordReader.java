@@ -9,7 +9,6 @@ import com.linkedin.camus.etl.kafka.common.EtlRequest;
 import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
 import com.linkedin.camus.etl.kafka.common.KafkaReader;
 
-import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -17,14 +16,13 @@ import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicReference;
-
-import kafka.message.Message;
 
 
 public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
@@ -66,7 +64,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
    * @throws IOException
    * @throws InterruptedException
    */
-  public EtlRecordReader(EtlInputFormat inputFormat, InputSplit split, TaskAttemptContext context) 
+  public EtlRecordReader(EtlInputFormat inputFormat, InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
     this.inputFormat = inputFormat;
     initialize(split, context);
@@ -74,7 +72,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
 
   @SuppressWarnings({ "rawtypes", "unchecked" })
   @Override
-  public void initialize(InputSplit split, TaskAttemptContext context) 
+  public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
     // For class path debugging
     log.info("classpath: " + System.getProperty("java.class.path"));
@@ -202,8 +200,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
       return false;
     }
 
-    Message message = null;
-
     while (true) {
       try {
         if (reader == null || !reader.hasNext()) {
@@ -239,7 +235,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         }
         int count = 0;
         long messagebytes = 0;
-        AtomicReference<Message> messageRef = new AtomicReference<Message>();
+        AtomicReference<ConsumerRecord<byte[], byte[]>> messageRef = new AtomicReference<>();
         while (reader.getNext(key, msgValue, msgKey, messageRef)) {
           readBytes += key.getMessageSize();
           count++;
@@ -247,7 +243,6 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
           context.progress();
           mapperContext.getCounter("total", "event-count").increment(1);
           byte[] bytes = getBytes(msgValue);
-          byte[] keyBytes = getBytes(msgKey);
 
           long tempTime = System.currentTimeMillis();
           CamusWrapper wrapper;
@@ -329,13 +324,11 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
         // Hack to fix the problem when we run into an empty message.
         mapperContext.write(key, new ExceptionWritable(mme));
         // Without reset reader, will continue to read messages out of it.
-        continue;
       } catch (Throwable t) {
         Exception e = new Exception(t.getLocalizedMessage(), t);
         e.setStackTrace(t.getStackTrace());
         mapperContext.write(key, new ExceptionWritable(e));
         reader = null;
-        continue;
       }
     }
   }

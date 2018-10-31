@@ -8,15 +8,16 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Map.Entry;
 
-import kafka.javaapi.producer.Producer;
-import kafka.producer.KeyedMessage;
-import kafka.producer.ProducerConfig;
-
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.log4j.Logger;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
@@ -233,24 +234,20 @@ public class EtlCounts {
     // Shuffle the broker
 
     Properties props = new Properties();
-    props.put("metadata.broker.list", brokerList);
-    props.put("producer.type", "async");
-    props.put("request.required.acks", "1");
-    props.put("request.timeout.ms", "30000");
     log.debug("Broker list: " + brokerList);
-    Producer producer = new Producer(new ProducerConfig(props));
-    try {
+    props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+    props.put(ProducerConfig.ACKS_CONFIG, "all");
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+    props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, String.valueOf(30_000));
+
+    try (Producer<byte[], byte[]> producer = new KafkaProducer<>(props)) {
       for (byte[] message : monitorSet) {
-        KeyedMessage keyedMessage = new KeyedMessage("TrackingMonitoringEvent", message);
-        producer.send(keyedMessage);
+        producer.send(new ProducerRecord<>("TrackingMonitoringEvent", message));
       }
     } catch (Exception e) {
       e.printStackTrace();
-      System.out.println(topic + " issue sending tracking to " + brokerList.toString());
-    } finally {
-      if (producer != null) {
-        producer.close();
-      }
+      System.out.println(topic + " issue sending tracking to " + brokerList);
     }
 
   }
