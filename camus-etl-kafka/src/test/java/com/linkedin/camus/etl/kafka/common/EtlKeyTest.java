@@ -4,7 +4,6 @@ import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.UTF8;
 import org.apache.hadoop.io.WritableComparable;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInput;
@@ -27,7 +26,6 @@ public class EtlKeyTest {
     in.reset(out.getData(), out.getLength());
 
     newKey.readFields(in);
-    assertEquals("leaderId", newKey.getLeaderId());
     assertEquals(1, newKey.getPartition());
     assertEquals(2, newKey.getBeginOffset());
     assertEquals(3, newKey.getOffset());
@@ -39,7 +37,6 @@ public class EtlKeyTest {
   }
 
   public static class OldEtlKey implements WritableComparable<OldEtlKey> {
-    private String leaderId = "leaderId";
     private int partition = 1;
     private long beginOffset = 2;
     private long offset = 3;
@@ -54,7 +51,7 @@ public class EtlKeyTest {
     }
 
     public void write(DataOutput out) throws IOException {
-      UTF8.writeString(out, this.leaderId);
+      UTF8.writeString(out, "");
       out.writeInt(this.partition);
       out.writeLong(this.beginOffset);
       out.writeLong(this.offset);

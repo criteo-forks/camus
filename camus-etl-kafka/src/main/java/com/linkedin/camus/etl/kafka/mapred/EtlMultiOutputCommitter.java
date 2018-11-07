@@ -13,7 +13,6 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -58,7 +57,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
   }
 
   public void addOffset(EtlKey key) {
-    String topicPart = new StringBuilder(key.getTopic()).append('-').append(key.getLeaderId()).append('-').append(key.getPartition()).toString();
+    String topicPart = new StringBuilder(key.getTopic()).append('-').append(key.getPartition()).toString();
     if (offsets.containsKey(topicPart)) {
       EtlKey offsetKey = offsets.get(topicPart);
       Long eventCount = eventCounts.get(topicPart);
@@ -86,7 +85,7 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
       throw new IllegalStateException(e);
     }
     workingFileMetadataPattern =
-        Pattern.compile("data\\.([^\\.]+)\\.([\\d_]+)\\.(\\d+)\\.([^\\.]+)-m-\\d+"
+        Pattern.compile("data\\.([^\\.]+)\\.(\\d+)\\.([^\\.]+)-m-\\d+"
             + recordWriterProvider.getFilenameExtension());
     this.log = log;
   }
@@ -173,16 +172,15 @@ public class EtlMultiOutputCommitter extends FileOutputCommitter {
       throw new IOException("Could not extract metadata from working filename '" + file + "'");
     }
     String topic = m.group(1);
-    String leaderId = m.group(2);
-    String partition = m.group(3);
-    String encodedPartition = m.group(4);
+    String partition = m.group(2);
+    String encodedPartition = m.group(3);
 
     String partitionedPath =
         EtlMultiOutputFormat.getPartitioner(context, topic).generatePartitionedPath(context, topic, encodedPartition);
 
     partitionedPath +=
         "/"
-            + EtlMultiOutputFormat.getPartitioner(context, topic).generateFileName(context, topic, leaderId,
+            + EtlMultiOutputFormat.getPartitioner(context, topic).generateFileName(context, topic,
                 Integer.parseInt(partition), count, offset, encodedPartition);
 
     return partitionedPath + recordWriterProvider.getFilenameExtension();

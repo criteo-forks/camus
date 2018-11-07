@@ -49,15 +49,15 @@ abstract public class BaseTimeBasedPartitioner extends Partitioner {
   }
 
   @Override
-  public String generateFileName(JobContext context, String topic, String brokerId, int partitionId, int count,
+  public String generateFileName(JobContext context, String topic, int partitionId, int count,
       long offset, String encodedPartition) {
-    return topic + "." + brokerId + "." + partitionId + "." + count + "." + offset + "." + encodedPartition;
+    return topic + "." + partitionId + "." + count + "." + offset + "." + encodedPartition;
   }
 
   @Override
-  public String getWorkingFileName(JobContext context, String topic, String brokerId, int partitionId,
+  public String getWorkingFileName(JobContext context, String topic, int partitionId,
       String encodedPartition) {
-    return "data." + topic.replace('.', '_') + "." + brokerId + "." + partitionId + "." + encodedPartition;
+    return "data." + topic.replace('.', '_') + "." + partitionId + "." + encodedPartition;
   }
 
 }

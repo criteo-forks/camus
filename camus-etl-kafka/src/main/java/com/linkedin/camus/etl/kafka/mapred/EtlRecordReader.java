@@ -189,7 +189,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
       EtlRequest request = null;
 
       while ((request = (EtlRequest) split.popRequest()) != null) {
-        key.set(request.getTopic(), request.getLeaderId(), request.getPartition(), request.getOffset(),
+        key.set(request.getTopic(), request.getPartition(), request.getOffset(),
             request.getOffset(), 0);
         //Set lag on partitions with request
 //        mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).increment(request.getLastOffset() - request.getOffset());
@@ -212,14 +212,14 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
             endTimeStamp = 0;
           }
 
-          key.set(request.getTopic(), request.getLeaderId(), request.getPartition(), request.getOffset(),
+          key.set(request.getTopic(), request.getPartition(), request.getOffset(),
               request.getOffset(), 0);
           value = null;
           log.info("\n\ntopic:" + request.getTopic() + " partition:" + request.getPartition() + " beginOffset:"
               + request.getOffset() + " estimatedLastOffset:" + request.getLastOffset());
 
           statusMsg += statusMsg.length() > 0 ? "; " : "";
-          statusMsg += request.getTopic() + ":" + request.getLeaderId() + ":" + request.getPartition();
+          statusMsg += request.getTopic() + ":" + request.getPartition();
           context.setStatus(statusMsg);
 
           if (reader != null) {

@@ -107,7 +107,7 @@ public class KafkaReader {
       throw new MalformedMessageException("Malformed message: " + Arrays.toString(record.value()), e);
     } finally {
       key.clear();
-      key.set(kafkaRequest.getTopic(), kafkaRequest.getLeaderId(), kafkaRequest.getPartition(), currentOffset, record.offset() + 1, record.checksum());
+      key.set(kafkaRequest.getTopic(), kafkaRequest.getPartition(), currentOffset, record.offset() + 1, record.checksum());
 
       key.setMessageSize(record.serializedKeySize() + record.serializedValueSize());
 

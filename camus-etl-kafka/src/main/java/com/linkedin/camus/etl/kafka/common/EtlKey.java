@@ -3,14 +3,8 @@ package com.linkedin.camus.etl.kafka.common;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Map;
 
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.MapWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.UTF8;
-import org.apache.hadoop.io.Writable;
-import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.*;
 
 import com.linkedin.camus.etl.IEtlKey;
 
@@ -22,10 +16,8 @@ import com.linkedin.camus.etl.IEtlKey;
 public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
   public static final Text SERVER = new Text("server");
   public static final Text SERVICE = new Text("service");
-  public static EtlKey DUMMY_KEY = new EtlKey();
   private static final Text MESSAGE_SIZE_KEY = new Text("message.size");
 
-  private String leaderId = "";
   private int partition = 0;
   private long beginOffset = 0;
   private long offset = 0;
@@ -40,7 +32,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
    * dummy empty constructor
    */
   public EtlKey() {
-    this("dummy", "0", 0, 0, 0, 0);
+    this("dummy", 0, 0, 0, 0);
   }
 
   public EtlKey(EtlKey other) {
@@ -56,20 +48,19 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
     this.partitionMap = new MapWritable(other.partitionMap);
   }
 
-  public EtlKey(String topic, String leaderId, int partition) {
-    this.set(topic, leaderId, partition, 0, 0, 0);
+  public EtlKey(String topic, int partition) {
+    this.set(topic, partition, 0, 0, 0);
   }
 
-  public EtlKey(String topic, String leaderId, int partition, long beginOffset, long offset) {
-    this.set(topic, leaderId, partition, beginOffset, offset, 0);
+  public EtlKey(String topic, int partition, long beginOffset, long offset) {
+    this.set(topic, partition, beginOffset, offset, 0);
   }
 
-  public EtlKey(String topic, String leaderId, int partition, long beginOffset, long offset, long checksum) {
-    this.set(topic, leaderId, partition, beginOffset, offset, checksum);
+  public EtlKey(String topic, int partition, long beginOffset, long offset, long checksum) {
+    this.set(topic, partition, beginOffset, offset, checksum);
   }
 
-  public void set(String topic, String leaderId, int partition, long beginOffset, long offset, long checksum) {
-    this.leaderId = leaderId;
+  public void set(String topic, int partition, long beginOffset, long offset, long checksum) {
     this.partition = partition;
     this.beginOffset = beginOffset;
     this.offset = offset;
@@ -81,7 +72,6 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
   }
 
   public void clear() {
-    leaderId = "";
     partition = 0;
     beginOffset = 0;
     offset = 0;
@@ -119,10 +109,6 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
   public String getTopic() {
     return topic;
-  }
-
-  public String getLeaderId() {
-    return leaderId;
   }
 
   public int getPartition() {
@@ -171,7 +157,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    this.leaderId = UTF8.readString(in);
+    UTF8.readString(in); // deprecated, was leaderId
     this.partition = in.readInt();
     this.beginOffset = in.readLong();
     this.offset = in.readLong();
@@ -191,7 +177,7 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    UTF8.writeString(out, this.leaderId);
+    UTF8.writeString(out, "");
     out.writeInt(this.partition);
     out.writeLong(this.beginOffset);
     out.writeLong(this.offset);
@@ -213,46 +199,14 @@ public class EtlKey implements WritableComparable<EtlKey>, IEtlKey {
       } else if (offset < o.offset) {
         return -1;
       } else {
-        if (checksum > o.checksum) {
-          return 1;
-        } else if (checksum < o.checksum) {
-          return -1;
-        } else {
-          return 0;
-        }
+        return Long.compare(checksum, o.checksum);
       }
     }
   }
 
   @Override
   public String toString() {
-    StringBuilder builder = new StringBuilder();
-    builder.append("topic=");
-    builder.append(topic);
-    builder.append(" partition=");
-    builder.append(partition);
-    builder.append("leaderId=");
-    builder.append(leaderId);
-    builder.append(" server=");
-    builder.append(server);
-    builder.append(" service=");
-    builder.append(service);
-    builder.append(" beginOffset=");
-    builder.append(beginOffset);
-    builder.append(" offset=");
-    builder.append(offset);
-    builder.append(" msgSize=");
-    builder.append(getMessageSize());
-    builder.append(" checksum=");
-    builder.append(checksum);
-    builder.append(" time=");
-    builder.append(time);
-
-    for (Map.Entry<Writable, Writable> e : partitionMap.entrySet()) {
-      builder.append(" " + e.getKey() + "=");
-      builder.append(e.getValue().toString());
-    }
-
-    return builder.toString();
+    return String.format("topic=%s partition=%d beginOffset=%d offset=%d msgSize=%d checksum=%d time=%d",
+            topic, partition, beginOffset, offset, getMessageSize(), checksum, time);
   }
 }

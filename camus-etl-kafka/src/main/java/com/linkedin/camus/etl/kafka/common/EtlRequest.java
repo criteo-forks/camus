@@ -19,7 +19,7 @@ import com.linkedin.camus.workallocater.CamusRequest;
 /**
  * A class that represents the kafka pull request.
  * 
- * The class is a container for topic, leaderId, partition, uri and offset. It is
+ * The class is a container for topic, partition, and offset. It is
  * used in reading and writing the sequence files used for the extraction job.
  * 
  * @author Richard Park
@@ -30,7 +30,6 @@ public class EtlRequest implements CamusRequest {
   public static final long DEFAULT_OFFSET = 0;
 
   private String topic = "";
-  private String leaderId = "";
   private int partition = 0;
 
   private long offset = DEFAULT_OFFSET;
@@ -44,7 +43,6 @@ public class EtlRequest implements CamusRequest {
 
   public EtlRequest(EtlRequest other) {
     this.topic = other.topic;
-    this.leaderId = other.leaderId;
     this.partition = other.partition;
     this.offset = other.offset;
     this.latestOffset = other.latestOffset;
@@ -77,13 +75,11 @@ public class EtlRequest implements CamusRequest {
    *
    * @param topic
    *            The topic name
-   *  @param leaderId
-   *            The leader broker for this topic and partition
    * @param partition
    *            The partition to pull
    */
-  public EtlRequest(JobContext context, String topic, String leaderId, int partition) {
-    this(context, topic, leaderId, partition, DEFAULT_OFFSET);
+  public EtlRequest(JobContext context, String topic, int partition) {
+    this(context, topic, partition, DEFAULT_OFFSET);
   }
 
   /**
@@ -96,10 +92,9 @@ public class EtlRequest implements CamusRequest {
    *            The partition to pull
    * @param offset
    */
-  public EtlRequest(JobContext context, String topic, String leaderId, int partition, long offset) {
+  public EtlRequest(JobContext context, String topic, int partition, long offset) {
     this.context = context;
     this.topic = topic;
-    this.leaderId = leaderId;
     this.partition = partition;
     setOffset(offset);
   }
@@ -110,15 +105,6 @@ public class EtlRequest implements CamusRequest {
   @Override
   public void setOffset(long offset) {
     this.offset = offset;
-  }
-
-  /**
-   * Retrieve the broker node id.
-   *
-   * @return
-   */
-  public String getLeaderId() {
-    return this.leaderId;
   }
 
   /* (non-Javadoc)
@@ -145,10 +131,6 @@ public class EtlRequest implements CamusRequest {
     return this.offset;
   }
 
-  public void setLeaderId(String leaderId) {
-    this.leaderId = leaderId;
-  }
-
   /* (non-Javadoc)
    * @see com.linkedin.camus.etl.kafka.common.CamusRequest#isValidOffset()
    */
@@ -159,7 +141,7 @@ public class EtlRequest implements CamusRequest {
 
   @Override
   public String toString() {
-    return topic + "\tleader:" + leaderId + "\tpartition:" + partition + "\tearliest_offset:" + getEarliestOffset() +
+    return topic + "\tpartition:" + partition + "\tearliest_offset:" + getEarliestOffset() +
             "\toffset:" + offset + "\tlatest_offset:" + getLastOffset() + "\tavg_msg_size:" + avgMsgSize +
             "\testimated_size:" + estimateDataSize();
   }
@@ -193,7 +175,7 @@ public class EtlRequest implements CamusRequest {
    */
   @Override
   public CamusRequest clone() {
-    return new EtlRequest(context, topic, leaderId, partition, offset);
+    return new EtlRequest(context, topic, partition, offset);
   }
 
   /* (non-Javadoc)
@@ -240,7 +222,7 @@ public class EtlRequest implements CamusRequest {
   @Override
   public void readFields(DataInput in) throws IOException {
     topic = UTF8.readString(in);
-    leaderId = UTF8.readString(in);
+    UTF8.readString(in); // deprecated, was leader ID
     UTF8.readString(in); // deprecated, was leader URI
     partition = in.readInt();
     offset = in.readLong();
@@ -250,7 +232,7 @@ public class EtlRequest implements CamusRequest {
   @Override
   public void write(DataOutput out) throws IOException {
     UTF8.writeString(out, topic);
-    UTF8.writeString(out, leaderId);
+    UTF8.writeString(out, "");  // deprecated, was leader ID
     UTF8.writeString(out, "");  // deprecated, was leader URI
     out.writeInt(partition);
     out.writeLong(offset);

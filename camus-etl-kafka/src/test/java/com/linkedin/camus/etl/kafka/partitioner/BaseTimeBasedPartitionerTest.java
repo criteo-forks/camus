@@ -30,14 +30,14 @@ public class BaseTimeBasedPartitionerTest {
 
   @Test
   public void testGenerateFileName() throws Exception {
-    String fileName = underTest.generateFileName(null, "tpc", "brk1", 1, 2, 45330016, "1388538000000");
-    assertEquals("tpc.brk1.1.2.45330016.1388538000000", fileName);
+    String fileName = underTest.generateFileName(null, "tpc", 1, 2, 45330016, "1388538000000");
+    assertEquals("tpc.1.2.45330016.1388538000000", fileName);
   }
 
   @Test
   public void testGetWorkingFileName() throws Exception {
-    String workingFileName = underTest.getWorkingFileName(null, "tpc", "brk1", 1, "1388538000000");
-    assertEquals("data.tpc.brk1.1.1388538000000", workingFileName);
+    String workingFileName = underTest.getWorkingFileName(null, "tpc", 1, "1388538000000");
+    assertEquals("data.tpc.1.1388538000000", workingFileName);
 
   }
 
