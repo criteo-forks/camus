@@ -40,23 +40,15 @@ public class KafkaReader {
 
   private long totalFetchTime = 0;
   private long lastFetchTime = 0;
-
-  private int fetchBufferSize;
+  private final long pollTimeoutMs;
 
   /**
    * Construct using the json representation of the kafka request
    */
-  public KafkaReader(EtlInputFormat inputFormat, TaskAttemptContext context, EtlRequest request,
-                     int clientTimeout, int fetchBufferSize)
-      throws Exception {
-    this.fetchBufferSize = fetchBufferSize;
+  public KafkaReader(EtlInputFormat inputFormat, TaskAttemptContext context, EtlRequest request) {
     this.context = context;
 
-    log.info("bufferSize=" + fetchBufferSize);
-    log.info("timeout=" + clientTimeout);
-
     // Create the kafka request from the json
-
     kafkaRequest = request;
 
     beginOffset = request.getOffset();
@@ -64,9 +56,10 @@ public class KafkaReader {
     lastOffset = request.getLastOffset();
     currentCount = 0;
     totalFetchTime = 0;
+    pollTimeoutMs = CamusJob.getKafkaConsumerPollTimeoutMs(context);
 
     // read data from queue
-    consumer = new KafkaConsumer<>(EtlInputFormat.getKafkaProperties(context));
+    consumer = inputFormat.createKafkaConsumer(context);
     TopicPartition topicPartition = new TopicPartition(kafkaRequest.getTopic(), kafkaRequest.getPartition());
     consumer.assign(Collections.singletonList(topicPartition));
     consumer.seek(topicPartition, kafkaRequest.getOffset());
@@ -136,9 +129,8 @@ public class KafkaReader {
     }
 
     long tempTime = System.currentTimeMillis();
-    int timeout = CamusJob.getKafkaTimeoutValue(context);
     try {
-      ConsumerRecords<byte[], byte[]> records = consumer.poll(timeout);
+      ConsumerRecords<byte[], byte[]> records = consumer.poll(pollTimeoutMs);
       lastFetchTime = (System.currentTimeMillis() - tempTime);
       log.debug("Time taken to fetch : " + (lastFetchTime / 1000) + " seconds");
       log.debug("The number of ConsumerRecord returned is : " + records.count());

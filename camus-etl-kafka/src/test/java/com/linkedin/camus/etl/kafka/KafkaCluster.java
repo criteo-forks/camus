@@ -14,6 +14,7 @@ import java.util.Random;
 import kafka.metrics.KafkaMetricsReporter;
 import kafka.server.KafkaConfig;
 import kafka.server.KafkaServer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.utils.Time;
 import kafka.utils.CoreUtils;
 import scala.Option;
@@ -48,18 +49,15 @@ public class KafkaCluster {
 
     this.props.putAll(baseProperties);
 
-    StringBuilder builder = null;
+    StringBuilder builder = new StringBuilder();
+    String separator = "";
 
     for (int i = 0; i < numOfBrokers; ++i) {
-      if (builder != null)
-        builder.append(",");
-      else
-        builder = new StringBuilder();
 
       int brokerPort = getAvailablePort();
 
-      builder.append("localhost:");
-      builder.append(brokerPort);
+      builder.append("localhost:").append(brokerPort).append(separator);
+      separator = ",";
 
       Properties properties = new Properties();
       properties.putAll(baseProperties);
@@ -76,7 +74,7 @@ public class KafkaCluster {
       brokers.add(startBroker(properties));
     }
 
-    this.props.put("metadata.broker.list", builder.toString());
+    this.props.put("kafka.consumer." + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, builder.toString());
     this.props.put("zookeeper.connect", zookeeper.getConnection());
 
   }

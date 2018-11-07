@@ -97,7 +97,7 @@ public class MapredUtil {
                         reader.close();
                     }
                 } catch (IOException e) {
-                    LOG.error("got exception while reading " + path + " : " + e.getMessage());
+                    LOG.error("got exception while reading " + path, e);
                     retries--;
                     if (retries == 0) {
                         throw e;

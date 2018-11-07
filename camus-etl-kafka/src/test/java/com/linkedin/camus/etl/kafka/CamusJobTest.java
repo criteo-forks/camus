@@ -110,9 +110,6 @@ public class CamusJobTest {
         SequenceFileRecordWriterProvider.class.getName());
 
     props.setProperty(EtlMultiOutputFormat.ETL_RUN_TRACKING_POST, Boolean.toString(false));
-    props.setProperty(CamusJob.KAFKA_CLIENT_NAME, "Camus");
-
-    props.setProperty(CamusJob.KAFKA_BROKERS, props.getProperty("metadata.broker.list"));
 
     // Run Map/Reduce tests in process.
     //props.setProperty("mapreduce.framework.name", "local");

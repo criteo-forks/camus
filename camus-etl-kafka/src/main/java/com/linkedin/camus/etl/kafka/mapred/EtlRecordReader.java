@@ -225,9 +225,7 @@ public class EtlRecordReader extends RecordReader<EtlKey, CamusWrapper> {
           if (reader != null) {
             closeReader();
           }
-          reader =
-              new KafkaReader(inputFormat, context, request, CamusJob.getKafkaTimeoutValue(mapperContext),
-                  CamusJob.getKafkaBufferSize(mapperContext));
+          reader = new KafkaReader(inputFormat, context, request);
 
           decoder = MessageDecoderFactory.createMessageDecoder(context, request.getTopic());
           //          mapperContext.getCounter("offsetlag_per_partition", Integer.toString(key.getPartition())).setValue(request.getLastOffset() - request.getOffset());

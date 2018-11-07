@@ -13,6 +13,7 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -103,11 +104,9 @@ public class CamusJobTestWithMock {
         SequenceFileRecordWriterProvider.class.getName());
 
     props.setProperty(EtlMultiOutputFormat.ETL_RUN_TRACKING_POST, Boolean.toString(false));
-    props.setProperty(CamusJob.KAFKA_CLIENT_NAME, KAFKA_CLIENT_ID);
-    props.setProperty(CamusJob.KAFKA_TIMEOUT_VALUE, Integer.toString(KAFKA_TIMEOUT_VALUE));
-    props.setProperty(CamusJob.KAFKA_FETCH_BUFFER_SIZE, Integer.toString(KAFKA_BUFFER_SIZE));
+    props.setProperty("kafka.consumer." + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA_HOST + ":" + KAFKA_PORT);
+    props.setProperty(CamusJob.KAFKA_CONSUMER_POLL_TIMEOUT_MS, Integer.toString(KAFKA_TIMEOUT_VALUE));
 
-    props.setProperty(CamusJob.KAFKA_BROKERS, KAFKA_HOST + ":" + KAFKA_PORT);
 
     // Run Map/Reduce tests in process for hadoop2  
     props.setProperty("mapreduce.framework.name", "local");
@@ -244,6 +243,11 @@ public class CamusJobTestWithMock {
 
     public static void setLogger(Logger log) {
       EtlInputFormat.setLogger(log);
+    }
+
+    @Override
+    public KafkaConsumer<byte[], byte[]> createKafkaConsumer(JobContext context) {
+      return consumer;
     }
   }
 

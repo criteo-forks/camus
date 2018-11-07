@@ -27,7 +27,6 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.security.InvalidParameterException;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -60,7 +59,6 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
   public static final String CAMUS_WORK_ALLOCATOR_CLASS = "camus.work.allocator.class";
   public static final String CAMUS_WORK_ALLOCATOR_DEFAULT = "com.linkedin.camus.workallocater.BaseAllocator";
 
-  private static final String BROKER_URL_PATTERN = "\\w+:\\d+";
   private static Logger log = null;
 
   public EtlInputFormat() {
@@ -97,21 +95,15 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
   }
 
   public static Properties getKafkaProperties(JobContext context) {
-    String broker = CamusJob.getKafkaBrokers(context);
-    if (!broker.matches(String.format("(%s,)*(%s)", BROKER_URL_PATTERN, BROKER_URL_PATTERN))) {
-      throw new InvalidParameterException("The kafka broker " + broker + " must follow address:port pattern");
-    }
-
     Properties properties = new Properties();
-    properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, broker);
-    properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
-    properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
-    properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-    properties.put(ConsumerConfig.EXCLUDE_INTERNAL_TOPICS_CONFIG, String.valueOf(true));
-    properties.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, CamusJob.getKafkaFetchRequestMaxWait(context));
-    properties.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, CamusJob.getKafkaFetchRequestMinBytes(context));
-    properties.put(ConsumerConfig.CLIENT_ID_CONFIG, CamusJob.getKafkaClientName(context));
-    properties.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, CamusJob.getKafkaFetchRequestBufferSize(context));
+    properties.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+    properties.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
+    for (String propertyName : ConsumerConfig.configNames()) {
+      String propertyValue = context.getConfiguration().get("kafka.consumer." + propertyName);
+      if (propertyValue != null && !propertyValue.isEmpty()) {
+        properties.setProperty(propertyName, propertyValue);
+      }
+    }
     return properties;
   }
 
@@ -126,10 +118,10 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
    * @param partitionsByLeaderId
    * @return
    */
-  public static List<CamusRequest> fetchLatestOffsetAndCreateEtlRequests(JobContext context,
-                                                                         Map<Integer, Set<TopicPartition>> partitionsByLeaderId) {
+  public List<CamusRequest> fetchLatestOffsetAndCreateEtlRequests(JobContext context,
+                                                                  Map<Integer, Set<TopicPartition>> partitionsByLeaderId) {
 
-    try (KafkaConsumer<byte[], byte[]> consumer = new KafkaConsumer<>(getKafkaProperties(context))) {
+    try (KafkaConsumer<byte[], byte[]> consumer = createKafkaConsumer(context)) {
       Set<TopicPartition> allPartitions = partitionsByLeaderId.values().stream()
               .flatMap(Collection::stream).collect(Collectors.toSet());
       Map<TopicPartition, Long> endOffsets = consumer.endOffsets(allPartitions);
@@ -210,7 +202,7 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     if (log.isInfoEnabled()) {
       log.info("The requests from kafka metadata are: \n" +
-              finalRequests.stream().map(CamusRequest::toString).collect(Collectors.joining()));
+              finalRequests.stream().map(CamusRequest::toString).collect(Collectors.joining("\n")));
     }
     writeRequests(finalRequests, context);
     Map<CamusRequest, EtlKey> offsetKeys = getPreviousOffsets(FileInputFormat.getInputPaths(context), context);

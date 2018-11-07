@@ -1,50 +1,19 @@
 package com.linkedin.camus.etl.kafka;
 
-import com.linkedin.camus.etl.kafka.common.DateUtils;
-import com.linkedin.camus.etl.kafka.common.EtlCounts;
-import com.linkedin.camus.etl.kafka.common.EtlKey;
-import com.linkedin.camus.etl.kafka.common.ExceptionWritable;
-import com.linkedin.camus.etl.kafka.common.Source;
+import com.linkedin.camus.etl.kafka.common.*;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import com.linkedin.camus.etl.kafka.mapred.EtlMapper;
 import com.linkedin.camus.etl.kafka.mapred.EtlMultiOutputFormat;
 import com.linkedin.camus.etl.kafka.mapred.MapredUtil.EffectiveSeqFileReader;
 import com.linkedin.camus.etl.kafka.reporter.BaseReporter;
 import com.linkedin.camus.etl.kafka.reporter.TimeReporter;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.lang.ClassNotFoundException;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Properties;
-import java.util.Comparator;
-import java.util.Arrays;
-import java.util.regex.Pattern;
-
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.OptionBuilder;
+import org.apache.commons.cli.*;
 import org.apache.commons.cli.Options;
-import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.filecache.DistributedCache;
-import org.apache.hadoop.fs.ContentSummary;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.TIPStatus;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -52,6 +21,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.log4j.Logger;
 import org.apache.log4j.xml.DOMConfigurator;
 import org.codehaus.jackson.map.DeserializationConfig;
@@ -61,32 +31,26 @@ import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormatter;
 
+import java.io.*;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.regex.Pattern;
+
 
 public class CamusJob extends Configured implements Tool {
 
-  public static final String ETL_EXECUTION_BASE_PATH = "etl.execution.base.path";
-  public static final String ETL_EXECUTION_HISTORY_PATH = "etl.execution.history.path";
-  public static final String ETL_COUNTS_PATH = "etl.counts.path";
-  public static final String ETL_KEEP_COUNT_FILES = "etl.keep.count.files";
-  public static final String ETL_BASEDIR_QUOTA_OVERIDE = "etl.basedir.quota.overide";
-  public static final String ETL_EXECUTION_HISTORY_MAX_OF_QUOTA = "etl.execution.history.max.of.quota";
-  public static final String ETL_FAIL_ON_ERRORS = "etl.fail.on.errors";
-  public static final String ZK_AUDIT_HOSTS = "zookeeper.audit.hosts";
-  public static final String KAFKA_MONITOR_TIER = "kafka.monitor.tier";
-  public static final String CAMUS_MESSAGE_ENCODER_CLASS = "camus.message.encoder.class";
-  public static final String BROKER_URI_FILE = "brokers.uri";
-  public static final String POST_TRACKING_COUNTS_TO_KAFKA = "post.tracking.counts.to.kafka";
-  public static final String KAFKA_FETCH_REQUEST_MAX_WAIT = "kafka.fetch.request.max.wait";
-  public static final String KAFKA_FETCH_REQUEST_MIN_BYTES = "kafka.fetch.request.min.bytes";
-  public static final String KAFKA_FETCH_REQUEST_CORRELATION_ID = "kafka.fetch.request.correlationid";
-  public static final String KAFKA_CLIENT_NAME = "kafka.client.name";
-  public static final String KAFKA_FETCH_BUFFER_SIZE = "kafka.fetch.buffer.size";
-  public static final String KAFKA_BROKERS = "kafka.brokers";
-  public static final String KAFKA_HOST_URL = "kafka.host.url";
-  public static final String KAFKA_HOST_PORT = "kafka.host.port";
-  public static final String KAFKA_TIMEOUT_VALUE = "kafka.timeout.value";
-  public static final String CAMUS_REPORTER_CLASS = "etl.reporter.class";
-  public static final String LOG4J_CONFIGURATION = "log4j.configuration";
+  public static final String ETL_EXECUTION_BASE_PATH =                  "etl.execution.base.path";
+  public static final String ETL_EXECUTION_HISTORY_PATH =               "etl.execution.history.path";
+  public static final String ETL_COUNTS_PATH =                          "etl.counts.path";
+  public static final String ETL_KEEP_COUNT_FILES =                     "etl.keep.count.files";
+  public static final String ETL_BASEDIR_QUOTA_OVERIDE =                "etl.basedir.quota.overide";
+  public static final String ETL_EXECUTION_HISTORY_MAX_OF_QUOTA =       "etl.execution.history.max.of.quota";
+  public static final String ETL_FAIL_ON_ERRORS =                       "etl.fail.on.errors";
+  public static final String KAFKA_MONITOR_TIER =                       "kafka.monitor.tier";
+  public static final String CAMUS_MESSAGE_ENCODER_CLASS =              "camus.message.encoder.class";
+  public static final String KAFKA_CONSUMER_POLL_TIMEOUT_MS =           "kafka.consumer.poll.timeout.ms";
+  public static final String CAMUS_REPORTER_CLASS =                     "etl.reporter.class";
+  public static final String LOG4J_CONFIGURATION =                      "log4j.configuration";
   private static org.apache.log4j.Logger log;
   private Job hadoopJob = null;
 
@@ -94,15 +58,15 @@ public class CamusJob extends Configured implements Tool {
 
   private DateTimeFormatter dateFmt = DateUtils.getDateTimeFormatter("YYYY-MM-dd-HH-mm-ss", DateTimeZone.UTC);
 
-  public CamusJob() throws IOException {
+  public CamusJob() {
     this(new Properties());
   }
 
-  public CamusJob(Properties props) throws IOException {
+  public CamusJob(Properties props) {
     this(props, org.apache.log4j.Logger.getLogger(CamusJob.class));
   }
 
-  public CamusJob(Properties props, Logger log) throws IOException {
+  public CamusJob(Properties props, Logger log) {
     this.props = props;
     this.log = log;
   }
@@ -274,7 +238,7 @@ public class CamusJob extends Configured implements Tool {
       fs.delete(stat.getPath(), true);
     }
 
-    // removing failed exectutions if we need room
+    // removing failed executions if we need room
     if (limit < currentCount) {
       FileStatus[] failedExecutions = fs.listStatus(execBasePath, new PathFilter() {
 
@@ -445,8 +409,7 @@ public class CamusJob extends Configured implements Tool {
   }
 
   // Posts the tracking counts to Kafka
-  public void sendTrackingCounts(JobContext job, FileSystem fs, Path newExecutionOutput) throws IOException,
-      URISyntaxException {
+  public void sendTrackingCounts(JobContext job, FileSystem fs, Path newExecutionOutput) throws IOException {
     if (EtlMultiOutputFormat.isRunTrackingPost(job)) {
       FileStatus[] gstatuses = fs.listStatus(newExecutionOutput, new PrefixFilter("counts"));
       HashMap<String, EtlCounts> allCounts = new HashMap<String, EtlCounts>();
@@ -501,7 +464,7 @@ public class CamusJob extends Configured implements Tool {
         }
       }
 
-      String brokerList = getKafkaBrokers(job);
+      String brokerList = getKafkaBootstrapServers(job);
       for (EtlCounts finalCounts : allCounts.values()) {
         finalCounts.postTrackingCountToKafka(job.getConfiguration(), props.getProperty(KAFKA_MONITOR_TIER), brokerList);
       }
@@ -588,52 +551,6 @@ public class CamusJob extends Configured implements Tool {
     return 0;
   }
 
-  // Temporarily adding all Kafka parameters here
-  public static boolean getPostTrackingCountsToKafka(Job job) {
-    return job.getConfiguration().getBoolean(POST_TRACKING_COUNTS_TO_KAFKA, true);
-  }
-
-  public static int getKafkaFetchRequestMinBytes(JobContext context) {
-    return context.getConfiguration().getInt(KAFKA_FETCH_REQUEST_MIN_BYTES, 1024);
-  }
-
-  public static int getKafkaFetchRequestMaxWait(JobContext job) {
-    return job.getConfiguration().getInt(KAFKA_FETCH_REQUEST_MAX_WAIT, 1000);
-  }
-
-  public static String getKafkaBrokers(JobContext job) {
-    String brokers = job.getConfiguration().get(KAFKA_BROKERS);
-    if (brokers == null) {
-      brokers = job.getConfiguration().get(KAFKA_HOST_URL);
-      if (brokers != null) {
-        log.warn("The configuration properties " + KAFKA_HOST_URL + " and " + KAFKA_HOST_PORT
-            + " are deprecated. Please switch to using " + KAFKA_BROKERS);
-        return brokers + ":" + job.getConfiguration().getInt(KAFKA_HOST_PORT, 10251);
-      }
-    }
-    return brokers;
-  }
-
-  public static int getKafkaFetchRequestCorrelationId(JobContext job) {
-    return job.getConfiguration().getInt(KAFKA_FETCH_REQUEST_CORRELATION_ID, -1);
-  }
-
-  public static String getKafkaClientName(JobContext job) {
-    return job.getConfiguration().get(KAFKA_CLIENT_NAME);
-  }
-
-  public static int getKafkaFetchRequestBufferSize(JobContext job) {
-    return job.getConfiguration().getInt(KAFKA_FETCH_BUFFER_SIZE, 65536);
-  }
-
-  public static int getKafkaTimeoutValue(JobContext job) {
-    return job.getConfiguration().getInt(KAFKA_TIMEOUT_VALUE, 30000);
-  }
-
-  public static int getKafkaBufferSize(JobContext job) {
-    return job.getConfiguration().getInt(KAFKA_FETCH_BUFFER_SIZE, 1024 * 1024);
-  }
-
   public static boolean getLog4jConfigure(JobContext job) {
     return job.getConfiguration().getBoolean(LOG4J_CONFIGURATION, false);
   }
@@ -641,4 +558,14 @@ public class CamusJob extends Configured implements Tool {
   public static String getReporterClass(Configuration configuration) {
     return configuration.get(CAMUS_REPORTER_CLASS, TimeReporter.class.getName());
   }
+
+
+  public static String getKafkaBootstrapServers(JobContext job) {
+    return job.getConfiguration().get("kafka.consumer." + ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG);
+  }
+
+  public static int getKafkaConsumerPollTimeoutMs(JobContext job) {
+    return job.getConfiguration().getInt(KAFKA_CONSUMER_POLL_TIMEOUT_MS, 30_000);
+  }
+
 }
