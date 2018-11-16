@@ -21,12 +21,15 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndTimestamp;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -152,6 +155,18 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     topicMetadata.keySet().removeAll(topicsToFilterOut);
   }
 
+
+  public Map<TopicPartition, OffsetAndTimestamp> getOffsetForTime(JobContext context, ZonedDateTime time, Set<TopicPartition> partitions) {
+    Properties properties = EtlInputFormat.getKafkaProperties(context);
+    try (KafkaConsumer<byte[], byte[]> consumer = createKafkaConsumer(context)) {
+      Map<TopicPartition, Long> times = new HashMap<>();
+      for (TopicPartition partition : partitions) {
+        times.put(partition, time.toInstant().toEpochMilli());
+      }
+      return consumer.offsetsForTimes(times);
+    }
+  }
+
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
     CamusJob.startTiming("getSplits");
@@ -203,20 +218,27 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
 
     Set<String> moveLatest = getMoveToLatestTopicsSet(context);
     boolean shouldMoveLatestIfNew = getKafkaMoveToLatestOffsetOnFirstRun(context);
+
+    // for the first run (meaning empty camus path), setting the property camus.override.start_date_time
+    // (in iso date time format: 2018-11-18T12:00Z) enable to seek offsets at a particular date and time.
+    // it will use the first offset having a kafka timestamp greater than this timestamp or the latest offset available
+    Map<TopicPartition, OffsetAndTimestamp> offsetAndTimestampMap;
+    String startDateTimeStr = context.getConfiguration().get("camus.override.start_date_time");
+    if (startDateTimeStr != null) {
+      ZonedDateTime startDateTime = ZonedDateTime.parse(startDateTimeStr, DateTimeFormatter.ISO_DATE_TIME);
+      offsetAndTimestampMap = getOffsetForTime(context, startDateTime, partitions);
+      log.info("overriding start datetime at " + DateTimeFormatter.ISO_DATE_TIME.format(startDateTime));
+    } else {
+      offsetAndTimestampMap = new HashMap<>();
+    }
+
     for (CamusRequest request : finalRequests) {
       String topic = request.getTopic();
-      if (moveLatest.contains(topic) || moveLatest.contains("all")
+      if (startDateTimeStr != null && !alreadySeen.contains(topic)) {
+        resetToOffsetForTime(offsetKeys, offsetAndTimestampMap, request);
+      } else if (moveLatest.contains(topic) || moveLatest.contains("all")
               || (shouldMoveLatestIfNew && !alreadySeen.contains(topic))) {
-        log.info("Moving to latest for topic: " + request.getTopic());
-        //TODO: factor out kafka specific request functionality
-        EtlKey oldKey = offsetKeys.get(request);
-        EtlKey newKey = new EtlKey(request.getTopic(), request.getPartition(), 0, request.getLastOffset());
-
-        if (oldKey != null) {
-          newKey.setMessageSize(oldKey.getMessageSize());
-        }
-
-        offsetKeys.put(request, newKey);
+        resetToLatestOffsets(offsetKeys, request);
       }
 
       EtlKey key = offsetKeys.get(request);
@@ -280,6 +302,36 @@ public class EtlInputFormat extends InputFormat<EtlKey, CamusWrapper> {
     allocator.init(props);
 
     return allocator.allocateWork(finalRequests, context);
+  }
+
+  private void resetToLatestOffsets(Map<CamusRequest, EtlKey> offsetKeys, CamusRequest request) {
+    log.info("Moving to latest for topic: " + request.getTopic());
+    //TODO: factor out kafka specific request functionality
+    EtlKey oldKey = offsetKeys.get(request);
+    EtlKey newKey = new EtlKey(request.getTopic(), request.getPartition(), 0, request.getLastOffset());
+
+    if (oldKey != null) {
+      newKey.setMessageSize(oldKey.getMessageSize());
+    }
+
+    offsetKeys.put(request, newKey);
+  }
+
+  private void resetToOffsetForTime(Map<CamusRequest, EtlKey> offsetKeys, Map<TopicPartition, OffsetAndTimestamp> offsetAndTimestampMap, CamusRequest request) {
+    EtlKey oldKey = offsetKeys.get(request);
+    OffsetAndTimestamp offsetAndTimestamp =
+            offsetAndTimestampMap.get(new TopicPartition(request.getTopic(), request.getPartition()));
+    long offset = request.getLastOffset();
+    if (offsetAndTimestamp != null) {
+      offset = offsetAndTimestamp.offset();
+    }
+    EtlKey newKey = new EtlKey(request.getTopic(), request.getPartition(), 0, offset);
+
+    if (oldKey != null) {
+      newKey.setMessageSize(oldKey.getMessageSize());
+    }
+
+    offsetKeys.put(request, newKey);
   }
 
   private Set<String> getAlreadySeenTopics(Map<CamusRequest, EtlKey> offsetKeys) {
