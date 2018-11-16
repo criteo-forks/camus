@@ -8,6 +8,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.errors.SerializationException;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ public class KafkaReader {
   private long totalFetchTime = 0;
   private long lastFetchTime = 0;
   private final long pollTimeoutMs;
+  private final TopicPartition topicPartition;
 
   /**
    * Construct using the json representation of the kafka request
@@ -60,7 +62,7 @@ public class KafkaReader {
 
     // read data from queue
     consumer = inputFormat.createKafkaConsumer(context);
-    TopicPartition topicPartition = new TopicPartition(kafkaRequest.getTopic(), kafkaRequest.getPartition());
+    topicPartition = new TopicPartition(kafkaRequest.getTopic(), kafkaRequest.getPartition());
     consumer.assign(Collections.singletonList(topicPartition));
     consumer.seek(topicPartition, kafkaRequest.getOffset());
     log.info("Beginning reading at offset " + beginOffset + " latest offset="
@@ -162,6 +164,11 @@ public class KafkaReader {
         return false;
       }
 
+      return true;
+    } catch (SerializationException e) {
+      long faultyRecordOffset = consumer.position(topicPartition);
+      log.info("Exception deserializing record with offset " + faultyRecordOffset + " for partition " + topicPartition);
+      consumer.seek(topicPartition, faultyRecordOffset + 1);
       return true;
     } catch (Exception e) {
       log.info("Exception generated during fetch");
