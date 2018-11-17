@@ -1,9 +1,11 @@
 package com.linkedin.camus.etl.kafka.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.linkedin.camus.etl.kafka.CamusJob;
 import com.linkedin.camus.etl.kafka.mapred.EtlInputFormat;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -12,10 +14,10 @@ import org.apache.kafka.common.errors.SerializationException;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -35,6 +37,7 @@ public class KafkaReader {
   private long lastOffset;
   private long currentCount;
 
+  private final EtlInputFormat inputFormat;
   private TaskAttemptContext context;
 
   private Iterator<ConsumerRecord<byte[], byte[]>> messageIter = null;
@@ -44,10 +47,14 @@ public class KafkaReader {
   private final long pollTimeoutMs;
   private final TopicPartition topicPartition;
 
+  public static final Pattern BAD_MASSAGE_PATTERN = Pattern.compile("Error deserializing key/value for partition (?<topic>.*)-(?<partition>[0-9]*) at offset (?<offset>[0-9]*)");
+
+
   /**
    * Construct using the json representation of the kafka request
    */
   public KafkaReader(EtlInputFormat inputFormat, TaskAttemptContext context, EtlRequest request) {
+    this.inputFormat = inputFormat;
     this.context = context;
 
     // Create the kafka request from the json
@@ -132,7 +139,7 @@ public class KafkaReader {
 
     long tempTime = System.currentTimeMillis();
     try {
-      ConsumerRecords<byte[], byte[]> records = consumer.poll(pollTimeoutMs);
+      ConsumerRecords<byte[], byte[]> records = safepoll(pollTimeoutMs);
       lastFetchTime = (System.currentTimeMillis() - tempTime);
       log.debug("Time taken to fetch : " + (lastFetchTime / 1000) + " seconds");
       log.debug("The number of ConsumerRecord returned is : " + records.count());
@@ -176,6 +183,86 @@ public class KafkaReader {
       return false;
     }
 
+  }
+
+  @VisibleForTesting
+  public static Map.Entry<TopicPartition,Long> parseErrorString(Pattern badMassagePattern, String badMassageErrorString) {
+    Matcher badMessageMatcher = badMassagePattern.matcher(badMassageErrorString);
+    if ( badMessageMatcher.find() )
+    {
+      String badMessageTopic = badMessageMatcher.group("topic");
+      Integer badMessagePartition = Integer.valueOf(badMessageMatcher.group("partition"));
+      Long badMessageOffset = Long.valueOf(badMessageMatcher.group("offset"));
+      return new AbstractMap.SimpleEntry<TopicPartition, Long>(new TopicPartition(badMessageTopic,badMessagePartition), badMessageOffset);
+    }
+    else {
+      log.error("Got bad message bug can't parse it:"+badMassageErrorString);
+    }
+    return null;
+  }
+
+  private ConsumerRecords<byte[], byte[]> safepoll(long pollTimeoutMs) {
+    try {
+      return consumer.poll(pollTimeoutMs);
+    } catch (SerializationException e) {
+      return handleBadMessage(e, pollTimeoutMs);
+    }
+  }
+
+  private ConsumerRecords<byte[], byte[]> handleBadMessage(SerializationException serializationException, long poll_timeout) {
+    //This exception happens only if we got bad message
+    log.warn("Got bad message: " + serializationException.getLocalizedMessage());
+
+    Map.Entry<TopicPartition, Long> badMessageOffset = parseErrorString(BAD_MASSAGE_PATTERN, serializationException.getMessage());
+    //If we can't parse error message - there is nothing we can do
+    if (badMessageOffset == null) {
+      throw serializationException;
+    }
+    //Amount of messages from last comitted up to failed
+    Long currentPosition = consumer.position(badMessageOffset.getKey());
+    Long messagesToRead = badMessageOffset.getValue() - currentPosition;
+    log.warn("Current position is " + messagesToRead + " messages from bad");
+
+    // this hack to extract the offset of bad messages is not needed anymore in kafka 1.1.1, but does not cost much
+    // as we are creating a one time consumer only in case of missed messages.
+    if (messagesToRead >= 1) {
+      //Ok, lets try to download only good messages.
+      //Lets create consumer out of our group (avoid rebalance)
+      Properties onetimeConsumerConfig = inputFormat.getKafkaProperties(context);
+      onetimeConsumerConfig.put(ConsumerConfig.CLIENT_ID_CONFIG, "OneTimeConsumer-" + onetimeConsumerConfig.hashCode());
+      onetimeConsumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, "OneTimeConsumer-" + onetimeConsumerConfig.hashCode());
+      //Lowering fetch buffer
+      onetimeConsumerConfig.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 5);
+      onetimeConsumerConfig.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 20);
+      onetimeConsumerConfig.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, messagesToRead.intValue());
+
+      KafkaConsumer<byte[], byte[]> onetimeconsumer = new KafkaConsumer<>(onetimeConsumerConfig);
+      onetimeconsumer.assign(Collections.singletonList(badMessageOffset.getKey()));
+      onetimeconsumer.seek(badMessageOffset.getKey(), currentPosition);
+
+      //Slide original consumer to next position
+      consumer.seek(badMessageOffset.getKey(), badMessageOffset.getValue() + 1);
+
+      //Return all messages that was not enough
+      List<ConsumerRecord<byte[], byte[]>> buffer = new ArrayList<>(messagesToRead.intValue());
+      try {
+        while (buffer.size() < messagesToRead) {
+          ConsumerRecords<byte[], byte[]> consumerRecords = onetimeconsumer.poll(poll_timeout * 3);
+          buffer.addAll(consumerRecords.records(badMessageOffset.getKey()));
+          log.trace("Downloaded " + consumerRecords.count() + " messages");
+        }
+        onetimeconsumer.close();
+      } catch (Exception bomb) {
+        log.error("We triggered bomb, saving messages failed", bomb);
+        onetimeconsumer.close();
+      }
+      log.info("We saved " + buffer.size() + " messages from " + messagesToRead.intValue());
+      return new ConsumerRecords<>(Collections.singletonMap(badMessageOffset.getKey(), buffer));
+    }
+    else {
+      consumer.seek(badMessageOffset.getKey(),badMessageOffset.getValue()+1);
+      return safepoll(pollTimeoutMs);
+    }
   }
 
   /**
