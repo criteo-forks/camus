@@ -214,12 +214,8 @@ public class KafkaReader {
     log.warn("Got bad message: " + serializationException.getLocalizedMessage());
 
     Map.Entry<TopicPartition, Long> badMessageOffset = parseErrorString(BAD_MASSAGE_PATTERN, serializationException.getMessage());
+    //If we can't parse error message - there is nothing we can do
     if (badMessageOffset == null) {
-      Throwable cause = serializationException.getCause();
-      if (cause != serializationException && cause instanceof KafkaException) {
-        return handleBadMessage((KafkaException) cause, poll_timeout);
-      }
-      //If we can't parse error message - there is nothing we can do
       throw serializationException;
     }
     //Amount of messages from last comitted up to failed
