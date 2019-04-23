@@ -9,7 +9,6 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.SerializationException;
 import org.apache.log4j.Logger;
@@ -48,7 +47,8 @@ public class KafkaReader {
   private final long pollTimeoutMs;
   private final TopicPartition topicPartition;
 
-  public static final Pattern BAD_MASSAGE_PATTERN = Pattern.compile("(Error deserializing key/value)|(Record batch) for partition (?<topic>.*)-(?<partition>[0-9]*) at offset (?<offset>[0-9]*)");
+  public static final Pattern BAD_MASSAGE_PATTERN = Pattern.compile("Error deserializing key/value for partition (?<topic>.*)-(?<partition>[0-9]*) at offset (?<offset>[0-9]*)");
+
 
   /**
    * Construct using the json representation of the kafka request
@@ -204,12 +204,12 @@ public class KafkaReader {
   private ConsumerRecords<byte[], byte[]> safepoll(long pollTimeoutMs) {
     try {
       return consumer.poll(pollTimeoutMs);
-    } catch (KafkaException e) {
+    } catch (SerializationException e) {
       return handleBadMessage(e, pollTimeoutMs);
     }
   }
 
-  private ConsumerRecords<byte[], byte[]> handleBadMessage(KafkaException serializationException, long poll_timeout) {
+  private ConsumerRecords<byte[], byte[]> handleBadMessage(SerializationException serializationException, long poll_timeout) {
     //This exception happens only if we got bad message
     log.warn("Got bad message: " + serializationException.getLocalizedMessage());
 
