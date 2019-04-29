@@ -317,16 +317,7 @@ public class CamusJob extends Configured implements Tool {
     // Send Tracking counts to Kafka
     sendTrackingCounts(job, fs, newExecutionOutput);
 
-    Map<EtlKey, ExceptionWritable> errors = readErrors(fs, newExecutionOutput);
-
-    // Print any potential errors encountered
-    if (!errors.isEmpty())
-      log.error("Errors encountered during job run:");
-
-    for (Entry<EtlKey, ExceptionWritable> entry : errors.entrySet()) {
-      log.error(entry.getKey().toString());
-      log.error(entry.getValue().toString());
-    }
+    Path errorLocation = newExecutionOutput;
 
     if(job.isSuccessful()) {
       // Only commit offset if the post job task is successful.
@@ -334,6 +325,7 @@ public class CamusJob extends Configured implements Tool {
         Path newHistory = new Path(execHistory, executionDate);
         log.info("Moving execution to history : " + newHistory);
         fs.rename(newExecutionOutput, newHistory);
+        errorLocation = newHistory;
       } else {
         log.error("post job task failed");
       }
@@ -345,6 +337,16 @@ public class CamusJob extends Configured implements Tool {
     stopTiming("commit");
     stopTiming("total");
     createReport(mapTasks, counters, job, timingMap);
+
+    // Print any potential errors encountered
+    Map<EtlKey, ExceptionWritable> errors = readErrors(fs, errorLocation);
+    if (!errors.isEmpty())
+      log.error("Errors encountered during job run:");
+
+    for (Entry<EtlKey, ExceptionWritable> entry : errors.entrySet()) {
+      log.error(entry.getKey().toString());
+      log.error(entry.getValue().toString());
+    }
 
     if (!job.isSuccessful()) {
       if (mapTasks.length > 0) {
@@ -360,7 +362,7 @@ public class CamusJob extends Configured implements Tool {
     }
 
     if (!errors.isEmpty()
-        && props.getProperty(ETL_FAIL_ON_ERRORS, Boolean.FALSE.toString()).equalsIgnoreCase(Boolean.TRUE.toString())) {
+            && props.getProperty(ETL_FAIL_ON_ERRORS, Boolean.FALSE.toString()).equalsIgnoreCase(Boolean.TRUE.toString())) {
       throw new RuntimeException("Camus saw errors, check stderr");
     }
   }
